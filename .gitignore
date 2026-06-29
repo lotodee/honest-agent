@@ -1,0 +1,51 @@
+# --- Secrets and local env (never commit) ---
+.env
+.env.*
+!.env.example
+*.local
+# Vertex service-account JSON and any credential blobs
+*service-account*.json
+*credentials*.json
+
+# --- Python ---
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+.coverage
+.coverage.*
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.python-version-local
+
+# --- uv ---
+# uv.lock IS committed; the cache is not
+.uv-cache/
+
+# --- Node / frontend ---
+node_modules/
+dist/
+.vite/
+*.tsbuildinfo
+
+# --- Supabase local stack ---
+supabase/.branches/
+supabase/.temp/
+
+# --- macOS ---
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# --- Editor / OS noise ---
+*.swp
+*~
+.idea/
+.vscode/*
+!.vscode/extensions.json
