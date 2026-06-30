@@ -18,10 +18,15 @@ from app.main import create_app
 def _local_settings_env() -> None:
     # The app fails loudly without its required settings, so tests supply local
     # dummies before the first construction. Real values come from env or .env.
-    os.environ.setdefault(
-        "DATABASE_URL", "postgresql://localhost:5432/honest_agent_test"
-    )
-    os.environ.setdefault("WEAVIATE_URL", "http://localhost:8080")
+    defaults = {
+        "DATABASE_URL": "postgresql://localhost:5432/honest_agent_test",
+        "WEAVIATE_URL": "http://localhost:8080",
+        "SUPABASE_JWT_ISSUER": "http://127.0.0.1:54321/auth/v1",
+        "SUPABASE_JWKS_URL": "http://127.0.0.1:54321/auth/v1/.well-known/jwks.json",
+        "MCP_SIGNING_SECRET": "test-mcp-signing-secret-0123456789abcdef",
+    }
+    for key, value in defaults.items():
+        os.environ.setdefault(key, value)
     get_settings.cache_clear()
 
 

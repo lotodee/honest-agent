@@ -13,6 +13,7 @@ dependencies = [
     "logfire[fastapi]",
     "sentry-sdk[fastapi]",
     "httpx",
+    "asyncpg>=0.31.0",
 ]
 
 [dependency-groups]
