@@ -18,7 +18,8 @@ from app.mcp.server import (
     McpSecurityMiddleware,
     build_mcp_server,
     build_mcp_verifier,
-    mcp_allowed_hosts,
+    mcp_allowed_origin_hosts,
+    mcp_request_hosts,
 )
 from app.retrieval.router import router as retrieval_router
 from app.tenants.gate import VisitorGate, install_visitor_gate
@@ -79,7 +80,8 @@ def create_app() -> FastAPI:
         McpSecurityMiddleware(
             _mcp_app,
             verifier=build_mcp_verifier(settings),
-            allowed_hosts=mcp_allowed_hosts(settings),
+            allowed_origin_hosts=mcp_allowed_origin_hosts(settings),
+            allowed_request_hosts=mcp_request_hosts(settings),
         ),
     )
     return app

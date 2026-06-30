@@ -27,3 +27,24 @@ def origin_host(value: str) -> str | None:
 def host_allowed(value: str, allowed_hosts: frozenset[str]) -> bool:
     host = origin_host(value)
     return host is not None and host in allowed_hosts
+
+
+def authority_host(value: str) -> str | None:
+    """The host of a bare HTTP `Host` header (`host[:port]`), or None if unparseable.
+
+    Unlike `origin_host`, a Host header has no scheme, so it is parsed as an
+    authority. Used for the DNS-rebinding defense: the server only honours Host
+    values it actually serves under.
+    """
+    candidate = value.strip()
+    if not candidate or candidate.lower() == "null":
+        return None
+    parts = urlsplit(f"//{candidate}")
+    if not parts.hostname:
+        return None
+    return parts.hostname.rstrip(".")
+
+
+def authority_allowed(value: str, allowed_hosts: frozenset[str]) -> bool:
+    host = authority_host(value)
+    return host is not None and host in allowed_hosts

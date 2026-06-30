@@ -21,7 +21,7 @@ from app.core.errors import (
     TenantAccessError,
     app_error_response,
 )
-from app.core.origins import host_allowed, origin_host
+from app.core.origins import authority_allowed, host_allowed, origin_host
 from app.core.settings import Settings
 from app.mcp.tokens import McpTokenVerifier
 from app.tenants.contexts import ExternalCallerContext
@@ -61,9 +61,15 @@ def build_mcp_server() -> FastMCP:
     return server
 
 
-def mcp_allowed_hosts(settings: Settings) -> frozenset[str]:
+def mcp_allowed_origin_hosts(settings: Settings) -> frozenset[str]:
+    """Hosts allowed in the Origin header (which sites may call), from the origins."""
     hosts = {origin_host(origin) for origin in settings.mcp_allowed_origins}
     return frozenset(host for host in hosts if host is not None)
+
+
+def mcp_request_hosts(settings: Settings) -> frozenset[str]:
+    """Host-header values this server serves under (the DNS-rebinding allowlist)."""
+    return frozenset(host.lower() for host in settings.mcp_allowed_hosts)
 
 
 def build_mcp_verifier(settings: Settings) -> McpTokenVerifier:
@@ -75,10 +81,13 @@ def build_mcp_verifier(settings: Settings) -> McpTokenVerifier:
 
 
 class McpSecurityMiddleware:
-    """Origin check (DNS-rebinding defense) then external-caller token verification.
+    """Host check then Origin check (both DNS-rebinding defenses) then token verify.
 
-    On success the verified tenant is placed in a contextvar the tool reads. The
-    inbound token is never written to the scope or forwarded anywhere downstream.
+    The Host check is the load-bearing rebinding defense: with the built-in
+    localhost-only check disabled, a rebound attacker-chosen Host must be rejected
+    here, including on a non-localhost deploy. On success the verified tenant is
+    placed in a contextvar the tool reads; the inbound token is never written to
+    the scope or forwarded anywhere downstream.
     """
 
     def __init__(
@@ -86,11 +95,13 @@ class McpSecurityMiddleware:
         app: ASGIApp,
         *,
         verifier: McpTokenVerifier,
-        allowed_hosts: frozenset[str],
+        allowed_origin_hosts: frozenset[str],
+        allowed_request_hosts: frozenset[str],
     ) -> None:
         self._app = app
         self._verifier = verifier
-        self._allowed_hosts = allowed_hosts
+        self._allowed_origin_hosts = allowed_origin_hosts
+        self._allowed_request_hosts = allowed_request_hosts
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
@@ -101,6 +112,7 @@ class McpSecurityMiddleware:
         }
         instance = str(scope.get("path", "/mcp"))
         try:
+            self._check_host(headers.get("host"))
             self._check_origin(headers.get("origin"))
             context = self._verifier.verify(parse_bearer(headers.get("authorization")))
         except AppError as exc:
@@ -112,6 +124,12 @@ class McpSecurityMiddleware:
         finally:
             _external_caller.reset(reset_token)
 
+    def _check_host(self, host: str | None) -> None:
+        # Fail closed: a missing or non-matching Host is rejected, so a rebound
+        # Host the server does not serve under cannot reach the tool.
+        if host is None or not authority_allowed(host, self._allowed_request_hosts):
+            raise TenantAccessError("host not allowed")
+
     def _check_origin(self, origin: str | None) -> None:
-        if origin is not None and not host_allowed(origin, self._allowed_hosts):
+        if origin is not None and not host_allowed(origin, self._allowed_origin_hosts):
             raise TenantAccessError("origin not allowed")

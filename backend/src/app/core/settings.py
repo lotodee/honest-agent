@@ -56,6 +56,10 @@ class Settings(BaseSettings):
     mcp_token_issuer: str = "honest-agent"  # noqa: S105
     mcp_token_audience: str = "honest-agent-mcp"  # noqa: S105
     mcp_allowed_origins: tuple[str, ...] = ()
+    # The Host-header values this server actually serves under. The DNS-rebinding
+    # defence: a rebound, attacker-chosen Host is rejected. Defaults to the local
+    # loopback names; set to the real domain on deploy (Day 9).
+    mcp_allowed_hosts: tuple[str, ...] = ("127.0.0.1", "localhost")
 
     # Visitor door: reject an over-large body before parsing it, so an anonymous
     # visitor cannot exhaust memory even while the rate limiter is stubbed.
@@ -73,10 +77,16 @@ class Settings(BaseSettings):
 # guard and the non-leak tests enumerate these; nothing here may reach a browser
 # bundle, a log line, or an error body. The public widget key and anon key are
 # deliberately NOT here: they are public identifiers.
+#
+# vertex_credentials_path is the path to the Vertex service-account JSON (the crown
+# jewel). The JSON CONTENT is never loaded into Settings, only read server-side at
+# call time, so the path is the only Vertex value Settings holds; it is guarded too
+# so the location of the crown jewel cannot leak to a browser or a log.
 SECRET_SETTINGS_FIELDS = frozenset(
     {
         "supabase_service_role_key",
         "mcp_signing_secret",
+        "vertex_credentials_path",
     }
 )
 

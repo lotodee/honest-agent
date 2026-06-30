@@ -8,7 +8,8 @@ from app.mcp.tokens import McpTokenVerifier, mint_mcp_token
 SECRET = "mcp-signing-secret-under-test-0123456789"  # noqa: S105
 ISSUER = "honest-agent"
 AUDIENCE = "honest-agent-mcp"
-ALLOWED = frozenset({"claude.ai"})
+ALLOWED_ORIGINS = frozenset({"claude.ai"})
+ALLOWED_HOSTS = frozenset({"127.0.0.1", "localhost"})
 
 
 class _InnerApp:
@@ -29,7 +30,10 @@ class _InnerApp:
 
 
 def _scope(headers: dict[str, str]) -> dict[str, Any]:
-    raw = [(k.lower().encode(), v.encode()) for k, v in headers.items()]
+    # Default to a legitimate Host so origin/token tests are not tripped by the
+    # Host check; tests that probe rebinding override "host" explicitly.
+    merged = {"host": "127.0.0.1", **headers}
+    raw = [(k.lower().encode(), v.encode()) for k, v in merged.items()]
     return {"type": "http", "path": "/mcp", "headers": raw}
 
 
@@ -50,7 +54,8 @@ def _middleware(inner: _InnerApp) -> McpSecurityMiddleware:
     return McpSecurityMiddleware(
         inner,
         verifier=McpTokenVerifier(secret=SECRET, issuer=ISSUER, audience=AUDIENCE),
-        allowed_hosts=ALLOWED,
+        allowed_origin_hosts=ALLOWED_ORIGINS,
+        allowed_request_hosts=ALLOWED_HOSTS,
     )
 
 
@@ -84,6 +89,40 @@ async def test_disallowed_origin_is_403_and_inner_never_runs() -> None:
         _noop_receive,
         send,
     )
+    assert not inner.ran
+    start = next(m for m in messages if m["type"] == "http.response.start")
+    assert start["status"] == 403
+
+
+async def test_forged_host_is_403_and_inner_never_runs() -> None:
+    # DNS-rebinding: a rebound Host the server does not serve under is rejected,
+    # even with a valid token and an allowed Origin.
+    inner = _InnerApp()
+    messages, send = await _capture_send()
+    await _middleware(inner)(
+        _scope(
+            {
+                "host": "attacker.com",
+                "authorization": f"Bearer {_valid_token()}",
+                "origin": "https://claude.ai",
+            }
+        ),
+        _noop_receive,
+        send,
+    )
+    assert not inner.ran
+    start = next(m for m in messages if m["type"] == "http.response.start")
+    assert start["status"] == 403
+
+
+async def test_missing_host_is_rejected() -> None:
+    inner = _InnerApp()
+    messages, send = await _capture_send()
+    scope = _scope(
+        {"authorization": f"Bearer {_valid_token()}", "origin": "https://claude.ai"}
+    )
+    scope["headers"] = [h for h in scope["headers"] if h[0] != b"host"]
+    await _middleware(inner)(scope, _noop_receive, send)
     assert not inner.ran
     start = next(m for m in messages if m["type"] == "http.response.start")
     assert start["status"] == 403
