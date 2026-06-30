@@ -1,0 +1,127 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Least privilege; the secret scan needs read access to contents only.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Cheap checks first. Steps run in order and a failure stops the rest, so the
+  # gate fails fast on the first problem before the heavier jobs ever start.
+  quick-gate:
+    name: Quick gate
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          fetch-depth: 0 # full history so the gitleaks diff scan has a baseline
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - name: Sync dependencies (fails on a stale lock)
+        run: uv sync --frozen
+      - name: Ruff lint
+        run: uv run ruff check
+      - name: Ruff format
+        run: uv run ruff format --check
+      - name: Mypy (strict)
+        run: uv run mypy src
+      - name: Unit tests
+        run: uv run pytest tests/unit
+      - name: Dependency audit (non-blocking on the empty tree)
+        continue-on-error: true
+        run: |
+          uv export --frozen --no-dev --no-emit-project -o requirements-audit.txt
+          uvx pip-audit -r requirements-audit.txt
+      - name: Secret scan (gitleaks)
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2.3.9
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Real Postgres and Weaviate, where the isolation and poison-PDF tests will run.
+  # Green on the empty scaffold via the smoke tests, which need no services yet.
+  integration:
+    name: Integration
+    runs-on: ubuntu-latest
+    needs: [quick-gate]
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+      WEAVIATE_URL: http://localhost:8080
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      weaviate:
+        image: cr.weaviate.io/semitechnologies/weaviate:1.38.2
+        env:
+          AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: "true"
+          PERSISTENCE_DATA_PATH: /var/lib/weaviate
+          DEFAULT_VECTORIZER_MODULE: none
+          QUERY_DEFAULTS_LIMIT: "25"
+        ports:
+          - 8080:8080
+          - 50051:50051
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - name: Sync dependencies
+        run: uv sync --frozen
+      - name: Wait for Weaviate readiness
+        run: |
+          for _ in $(seq 1 30); do
+            if curl -fsS http://localhost:8080/v1/.well-known/ready >/dev/null; then
+              echo "weaviate ready"; break
+            fi
+            sleep 2
+          done
+      - name: Integration tests
+        run: uv run pytest -m integration
+
+  # The eval gate is its own job so its red or green is a distinct headline. Green
+  # on the empty scaffold; the DeepEval golden set and DAG gate land on Day 7.
+  eval:
+    name: Eval gate
+    runs-on: ubuntu-latest
+    needs: [quick-gate]
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - name: Sync dependencies
+        run: uv sync --frozen
+      - name: Eval gate
+        run: uv run pytest -m eval
