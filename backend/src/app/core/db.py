@@ -18,9 +18,9 @@ class DatabaseSessions:
     database_url: str
 
 
-async def get_db_sessions() -> DatabaseSessions:
-    return DatabaseSessions(database_url=get_settings().database_url)
-
-
 def build_db_sessions(settings: Settings) -> DatabaseSessions:
     return DatabaseSessions(database_url=settings.database_url)
+
+
+async def get_db_sessions() -> DatabaseSessions:
+    return build_db_sessions(get_settings())
