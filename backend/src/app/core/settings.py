@@ -7,7 +7,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        # The .env lives at the repo root while the backend runs from backend/, so
+        # look in both: "../.env" resolves it when run from backend/, ".env" when
+        # run from the repo root. The real environment always wins over either.
+        env_file=(".env", "../.env"),
         env_file_encoding="utf-8",
         extra="ignore",
         frozen=True,

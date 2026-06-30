@@ -10,6 +10,7 @@ Metadata per RFC 9728, dynamic client registration, PKCE) is the Day-12 write-up
 import contextvars
 
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from app.agent.adapters import answer_for_external_caller
@@ -35,7 +36,17 @@ _TOOL_DESCRIPTION = (
 
 
 def build_mcp_server() -> FastMCP:
-    server = FastMCP("honest-agent", stateless_http=True, streamable_http_path="/")
+    # Our McpSecurityMiddleware is the authoritative Origin check (the spec's
+    # DNS-rebinding defense), so FastMCP's built-in, localhost-only check is turned
+    # off to avoid a second, conflicting Origin gate.
+    server = FastMCP(
+        "honest-agent",
+        stateless_http=True,
+        streamable_http_path="/",
+        transport_security=TransportSecuritySettings(
+            enable_dns_rebinding_protection=False
+        ),
+    )
 
     @server.tool(description=_TOOL_DESCRIPTION)
     async def answer(query: str) -> dict[str, object]:
