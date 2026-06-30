@@ -74,4 +74,4 @@ markers = [
     "integration: needs real services (Postgres, Weaviate) in Docker",
     "eval: DeepEval golden-set run that calls the model; its own CI job",
 ]
-addopts = "--cov=app --cov-report=term-missing --cov-report=html"
+addopts = "--import-mode=importlib --cov=app --cov-report=term-missing --cov-report=html"
