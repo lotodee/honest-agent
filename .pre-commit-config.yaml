@@ -1,0 +1,30 @@
+# Fast hooks only. This gate is kept under ~10 seconds so it is never bypassed
+# with --no-verify. mypy and the test suite are intentionally NOT here: they need
+# the full resolved environment and run in CI instead (see .github/workflows/ci.yml).
+minimum_pre_commit_version: "3.5.0"
+
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.20
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: detect-private-key
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: check-toml
+      - id: check-yaml
+      - id: check-added-large-files
+      - id: debug-statements
