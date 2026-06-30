@@ -8,7 +8,6 @@ import pytest_asyncio
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
-from app.core.db import DatabaseSessions, build_db_sessions
 from app.core.deps import Tenant
 from app.core.settings import Settings, get_settings, secret_values
 from app.main import create_app
@@ -50,13 +49,6 @@ async def client(app: FastAPI) -> AsyncIterator[AsyncClient]:
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as http_client:
         yield http_client
-
-
-@pytest.fixture
-def db_session(settings: Settings) -> DatabaseSessions:
-    # Stands in for the transactional, per-test session that rolls back once the
-    # async engine is wired; for now it is the typed seam carrying the URL.
-    return build_db_sessions(settings)
 
 
 @pytest.fixture

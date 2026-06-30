@@ -1,26 +1,18 @@
-"""The async database access seam. Reads the URL from settings; no engine yet."""
+"""The async Postgres connection pool. Created at startup, closed at shutdown."""
 
-from dataclasses import dataclass
+import asyncpg
 
-from app.core.settings import Settings, get_settings
+from app.core.settings import Settings
 
-
-@dataclass(frozen=True, slots=True)
-class DatabaseSessions:
-    """Per-request async session provider.
-
-    Carries the connection URL from settings. The concrete async engine
-    (asyncpg behind SQLAlchemy) is wired when the first tenant-scoped query
-    lands; until then this is the typed injection point every tenant router
-    depends on, so the wiring changes in one place.
-    """
-
-    database_url: str
+_POOL_MIN_SIZE = 1
+_POOL_MAX_SIZE = 5
 
 
-def build_db_sessions(settings: Settings) -> DatabaseSessions:
-    return DatabaseSessions(database_url=settings.database_url)
+async def create_db_pool(settings: Settings) -> asyncpg.Pool:
+    return await asyncpg.create_pool(
+        dsn=settings.database_url, min_size=_POOL_MIN_SIZE, max_size=_POOL_MAX_SIZE
+    )
 
 
-async def get_db_sessions() -> DatabaseSessions:
-    return build_db_sessions(get_settings())
+async def close_db_pool(pool: asyncpg.Pool) -> None:
+    await pool.close()

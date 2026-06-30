@@ -19,10 +19,22 @@ class AppError(Exception):
         super().__init__(detail)
 
 
+class BadRequestError(AppError):
+    status_code = status.HTTP_400_BAD_REQUEST
+    title = "Bad Request"
+    problem_type = f"{_PROBLEM_BASE}/bad-request"
+
+
 class AuthenticationError(AppError):
     status_code = status.HTTP_401_UNAUTHORIZED
     title = "Authentication Failed"
     problem_type = f"{_PROBLEM_BASE}/authentication"
+
+
+class RateLimitedError(AppError):
+    status_code = status.HTTP_429_TOO_MANY_REQUESTS
+    title = "Too Many Requests"
+    problem_type = f"{_PROBLEM_BASE}/rate-limited"
 
 
 class TenantAccessError(AppError):
