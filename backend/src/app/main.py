@@ -15,12 +15,23 @@ from app.eval.router import router as eval_router
 from app.guardrails.router import router as guardrails_router
 from app.ingestion.router import router as ingestion_router
 from app.mcp.router import router as mcp_router
+from app.mcp.server import (
+    McpSecurityMiddleware,
+    build_mcp_server,
+    build_mcp_verifier,
+    mcp_allowed_hosts,
+)
 from app.retrieval.router import router as retrieval_router
 from app.tenants.gate import VisitorGate, install_visitor_gate
 from app.tenants.rate_limit import AllowAllRateLimiter
 from app.tenants.router import router as tenants_router
 from app.tenants.widget_keys import PostgresWidgetKeyStore
 from app.tenants.widget_router import router as widget_router
+
+# The MCP server and its ASGI app are built once; the session manager is started
+# in the lifespan and the app is mounted (secured) under /mcp in create_app.
+_mcp_server = build_mcp_server()
+_mcp_app = _mcp_server.streamable_http_app()
 
 _DOMAIN_ROUTERS: tuple[APIRouter, ...] = (
     tenants_router,
@@ -41,10 +52,11 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.db_pool = pool
     app.state.widget_key_store = PostgresWidgetKeyStore(pool)
     app.state.rate_limiter = AllowAllRateLimiter()
-    try:
-        yield
-    finally:
-        await close_db_pool(pool)
+    async with _mcp_server.session_manager.run():
+        try:
+            yield
+        finally:
+            await close_db_pool(pool)
 
 
 def _visitor_gate(app: FastAPI, settings: Settings) -> VisitorGate:
@@ -64,4 +76,12 @@ def create_app() -> FastAPI:
     install_visitor_gate(app, lambda: _visitor_gate(app, settings))
     for router in _DOMAIN_ROUTERS:
         app.include_router(router, prefix="/v1")
+    app.mount(
+        "/mcp",
+        McpSecurityMiddleware(
+            _mcp_app,
+            verifier=build_mcp_verifier(settings),
+            allowed_hosts=mcp_allowed_hosts(settings),
+        ),
+    )
     return app

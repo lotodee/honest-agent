@@ -17,6 +17,7 @@ import jwt
 from fastapi import Request
 from jwt import PyJWK
 
+from app.core.bearer import parse_bearer
 from app.core.errors import AuthenticationError
 from app.core.settings import Settings, get_settings
 from app.tenants.contexts import OwnerRequestContext
@@ -148,14 +149,7 @@ def _live_verifier() -> OwnerTokenVerifier:
 
 
 def bearer_token(request: Request) -> str:
-    header = request.headers.get("Authorization")
-    if header is None:
-        raise AuthenticationError("missing authorization header")
-    scheme, _, value = header.partition(" ")
-    token = value.strip()
-    if scheme.lower() != "bearer" or not token:
-        raise AuthenticationError("malformed authorization header")
-    return token
+    return parse_bearer(request.headers.get("Authorization"))
 
 
 async def get_owner_context(request: Request) -> OwnerRequestContext:
