@@ -8,7 +8,13 @@ from app.core.settings import SECRET_SETTINGS_FIELDS, Settings, secret_values
 
 
 def test_secret_registry_names_the_crown_jewels() -> None:
-    assert {"supabase_service_role_key", "mcp_signing_secret"} <= SECRET_SETTINGS_FIELDS
+    # Every server-only secret Settings can hold: Supabase service_role, the MCP
+    # signing secret, and the path to the Vertex service-account JSON.
+    assert {
+        "supabase_service_role_key",
+        "mcp_signing_secret",
+        "vertex_credentials_path",
+    } <= SECRET_SETTINGS_FIELDS
 
 
 def test_no_secret_field_name_surfaces_in_a_response_model(app: FastAPI) -> None:
