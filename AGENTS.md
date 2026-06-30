@@ -59,9 +59,10 @@ Three layers. Unit (pure logic, agent wired with PydanticAI `TestModel`, no LLM)
 
 ## HARD SELF-REVIEW (do not skip)
 
-Before marking any unit of work done or opening a PR, run BOTH skills:
+Before marking any unit of work done or opening a PR, run ALL THREE skills on the diff:
 
 1. spec-review: does it match `BUILD_SPEC_LOCKED.md` and the day's artifact?
 2. senior-pass: clean architecture, DRY, typed, tested, no comment rot, real error handling, nothing mediocre.
+3. security-review: diff-driven application-security pass (auth, multi-tenant isolation, secrets, injection/SSRF, MCP token + no passthrough, error/info leak, abuse); BLOCKS on Critical/High.
 
-Work is NOT finished until both pass. If either flags something, fix it and re-run. No exceptions under deadline.
+Work is NOT finished until all three pass. If any flags something, fix it and re-run. No exceptions under deadline.

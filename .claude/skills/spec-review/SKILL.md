@@ -33,7 +33,7 @@ The change must use the locked tools and only the locked tools for its job. Flag
 - Relational and auth: Supabase and Postgres, RLS FORCED.
 - Eval: DeepEval with the deterministic DAG-metric CI gate, plus one agentic metric, plus an online referenceless scorer on sampled traces.
 - Observability: Logfire (OpenTelemetry). Errors: Sentry.
-- MCP: remote Streamable-HTTP server, Origin-validated, bearer-token verified, scoped.
+- MCP: remote Streamable-HTTP server as an OAuth 2.1 Resource Server, Origin-validated, verifies an EXTERNAL-CALLER token (a scoped API key or OAuth token that carries the tenant), NOT the owner Supabase login JWT. Validates signature/issuer/audience/expiry, rejects tokens not issued for this server, no token passthrough. Scoped (full OAuth written up, one audience/issuer check demonstrated). On Day 1 the credential is a self-minted signed token verified by a signing secret in env.
 - Dashboard: React plus Vite, minimal. Widget: Lit plus Shadow DOM plus Vite library bundle, served from a CDN.
 - Object storage: R2 or Supabase Storage, presigned PUT for large uploads.
 - Hosting: a warm container (Render, Fly, or Railway) for the Python service.
@@ -42,7 +42,10 @@ The change must use the locked tools and only the locked tools for its job. Flag
 ## Step 3 — Check against the LOCKED decisions
 
 - Single-tenant-excellent: exactly two tenants plus a passing isolation test, scale path documented not operated. Do not let the change try to operate tenant tiering, cold-tiering, or thousands of tenants.
-- One Python service. Cloudflare is optional and additive, never load-bearing.
+- One Python service. The visitor edge gate (widget-key + Origin allowlist + rate limit + sanitize) is in-app FastAPI middleware (Option B, owner-decided 2026-06-30); Cloudflare is optional and additive, never load-bearing, documented as the production move and the ingestion-queue scale-out target.
+- Three request paths across two trust domains, each resolving tenant from its own credential: owner Supabase JWT (login/ingestion), visitor public widget-key + Origin allowlist (no login), external-caller token for the MCP. Never reuse the owner JWT as the MCP credential.
+- Honesty verdict is fused into the answer capability (every answer returns {answer, verdict}); it is never an optional tool. Core capabilities are plain functions exposed via two thin adapters (in-process for the widget, MCP tool for external callers).
+- Key storage: widget keys are public identifiers in Postgres linked to tenant + allowed origins (not hashed); the MCP credential is a signing secret in env on Day 1, moving to a hashed-keys table later.
 - Scoped MCP. Full OAuth authorization server is documented in prose plus one demonstrated audience and issuer check, not built.
 - Dev-docs seed corpus.
 - Logfire for online eval (single surface).
