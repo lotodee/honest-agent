@@ -32,6 +32,10 @@ class InMemoryWidgetKeyStore:
 
 
 class PostgresWidgetKeyStore:
+    # widget_keys is a global public-key -> tenant lookup, not tenant-scoped data,
+    # so reading it crosses no tenant boundary. Forcing RLS and switching the app
+    # to a non-owner, non-BYPASSRLS role is the Day-2 isolation artifact and lands
+    # with the first tenant-DATA tables, not here.
     def __init__(self, pool: asyncpg.Pool) -> None:
         self._pool = pool
 

@@ -14,7 +14,6 @@ from app.core.settings import Settings, get_settings
 from app.eval.router import router as eval_router
 from app.guardrails.router import router as guardrails_router
 from app.ingestion.router import router as ingestion_router
-from app.mcp.router import router as mcp_router
 from app.mcp.server import (
     McpSecurityMiddleware,
     build_mcp_server,
@@ -40,7 +39,6 @@ _DOMAIN_ROUTERS: tuple[APIRouter, ...] = (
     retrieval_router,
     guardrails_router,
     eval_router,
-    mcp_router,
     widget_router,
 )
 
