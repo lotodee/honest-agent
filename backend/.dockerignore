@@ -1,0 +1,15 @@
+.venv
+tests
+.git
+.gitignore
+__pycache__
+*.pyc
+.mypy_cache
+.ruff_cache
+.pytest_cache
+htmlcov
+.coverage
+node_modules
+Dockerfile
+.dockerignore
+requirements-audit.txt

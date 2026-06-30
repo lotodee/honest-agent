@@ -1,0 +1,45 @@
+# Local dev data stack. Postgres + Auth come from local Supabase (`supabase start`),
+# so there is deliberately no Postgres service here. This file owns Weaviate and the
+# API container. Values come from the gitignored .env.
+#
+# Weaviate multi-tenancy and hybrid search are configured per collection at creation
+# time (multiTenancyConfig + BM25 inverted index alongside the vector index), in the
+# retrieval domain; the server below just needs to be up with bring-your-own vectors.
+
+services:
+  weaviate:
+    image: cr.weaviate.io/semitechnologies/weaviate:1.38.2
+    command:
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8080"
+      - --scheme
+      - http
+    ports:
+      - "8080:8080"
+      - "50051:50051"
+    environment:
+      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: "true"
+      PERSISTENCE_DATA_PATH: /var/lib/weaviate
+      DEFAULT_VECTORIZER_MODULE: none
+      ENABLE_API_BASED_MODULES: "true"
+      QUERY_DEFAULTS_LIMIT: "25"
+      CLUSTER_HOSTNAME: node1
+    volumes:
+      - weaviate_data:/var/lib/weaviate
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ./backend
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    depends_on:
+      - weaviate
+    restart: unless-stopped
+
+volumes:
+  weaviate_data:
