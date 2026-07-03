@@ -12,6 +12,9 @@ avoids all of that, so it is the chosen profile; SESSION-mode Supavisor is the
 fallback if a host cannot reach the direct port (re-check on the Day-9 deploy).
 """
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 import asyncpg
 
 from app.core.settings import Settings
@@ -30,3 +33,20 @@ async def create_db_pool(settings: Settings) -> asyncpg.Pool:
 
 async def close_db_pool(pool: asyncpg.Pool) -> None:
     await pool.close()
+
+
+@asynccontextmanager
+async def tenant_txn(
+    pool: asyncpg.Pool, tenant_id: str
+) -> AsyncIterator[asyncpg.Connection]:
+    """The ONLY path allowed to touch tenant data.
+
+    Sets the RLS tenant for exactly one transaction; set_config(..., true) resets
+    at commit or rollback, so a pooled connection can never leak tenant context to
+    its next user. The tenant id is a BIND PARAMETER, never interpolated, and an
+    unset variable makes every policy evaluate false (fail closed). The ingestion
+    worker (Days 3-4) will reuse this same wrapper for its job processing.
+    """
+    async with pool.acquire() as conn, conn.transaction():
+        await conn.execute("SELECT set_config('app.tenant_id', $1, true)", tenant_id)
+        yield conn
