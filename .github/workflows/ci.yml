@@ -116,6 +116,11 @@ jobs:
         # Versioned SQL applied as the owner before the tests, so CI reproduces the
         # app_user role and the forced-RLS schema the isolation sweep asserts.
         run: uv run python scripts/apply_migrations.py
+      - name: Install Tesseract (OCR for the PDF spike)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends tesseract-ocr
+          echo "TESSDATA_PREFIX=$(dirname "$(find /usr/share /usr/local/share -name eng.traineddata 2>/dev/null | head -1)")" >> "$GITHUB_ENV"
       - name: Integration tests
         run: uv run pytest -m integration
 

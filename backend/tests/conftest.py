@@ -2,6 +2,7 @@
 
 import os
 from collections.abc import AsyncIterator, Callable
+from pathlib import Path
 
 import asyncpg
 import pytest
@@ -60,6 +61,21 @@ async def client(app: FastAPI) -> AsyncIterator[AsyncClient]:
 def seeded_tenants() -> tuple[Tenant, Tenant]:
     # The two tenants the Day-2 isolation test proves cannot read or write each other.
     return Tenant("tenant-a"), Tenant("tenant-b")
+
+
+@pytest.fixture
+def make_text_pdf() -> Callable[[Path], None]:
+    # A tiny valid text PDF, shared by the PDF integration tests. fitz is imported
+    # lazily so unit runs that never touch PDFs do not load it.
+    def _make(path: Path) -> None:
+        import fitz
+
+        doc = fitz.open()
+        doc.new_page().insert_text((72, 72), "A healthy page with real native text.")
+        doc.save(str(path))
+        doc.close()
+
+    return _make
 
 
 @pytest_asyncio.fixture
