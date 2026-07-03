@@ -13,6 +13,7 @@ dependencies = [
     "logfire[fastapi]",
     "sentry-sdk[fastapi]",
     "httpx",
+    "asyncpg>=0.31.0",
 ]
 
 [dependency-groups]
@@ -66,6 +67,12 @@ no_implicit_reexport = true
 init_forbid_extra = true
 init_typed = true
 warn_required_dynamic_aliases = true
+
+# asyncpg ships no type stubs or py.typed marker; allow the import without
+# weakening strictness anywhere else.
+[[tool.mypy.overrides]]
+module = ["asyncpg.*"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

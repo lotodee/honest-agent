@@ -35,7 +35,7 @@ Never weaken any of these. If a change touches the spine, the spine tests run an
 - Types are the spec. mypy strict + Pydantic plugin (backend); TypeScript `strict` + `noUncheckedIndexedAccess` (frontend). Enforced in CI. The only escape hatch is a justified `# type: ignore[code]` with the specific code; never bare. Stale ignores are CI errors.
 - Never block the event loop. `async def` for awaitable I/O; plain `def` only for fully-sync handlers (threadpool). Push blocking work off the loop: `asyncio.to_thread` for blocking I/O, a process pool for CPU-heavy work. PDF parsing runs in a separate, timeout-bounded process (crash isolation + CPU). The Ruff `ASYNC` rules partly enforce this; do not fight them.
 - Module layout is domain-first, not file-type. Each domain (`tenants`, `ingestion`, `agent`, `retrieval`, `guardrails`, `eval`, `mcp`) owns its router, schemas, service, deps, exceptions. `core/` holds settings, logging, db, shared deps. `src/` layout, tests in a mirrored `tests/` tree.
-- Tenant scoping lives in ONE shared dependency (`get_current_tenant`), injected into every tenant-touching router, raising `TenantAccessError` on mismatch. Never re-implement or weaken it per route. API schemas are separate from internal/DB models; every route declares `response_model`.
+- Tenant scoping is resolved per door, each from its own credential (see `docs/spec-amendments.md` A1, which supersedes the original single-`get_current_tenant` wording): owner JWT → `app_metadata`, visitor key → key row, MCP token → token claim, each producing its own typed context in `tenants/contexts.py`. Keep one scoping seam WITHIN a door; do not re-introduce a single cross-door `get_current_tenant`. Never weaken a door's resolver per route. API schemas are separate from internal/DB models; every route declares `response_model`.
 - Agent: typed PydanticAI deps (`deps_type`/`RunContext`) and a validated `output_type` (the honesty verdict is a discriminated union, not free text and not an exception). Define the `Agent` at module scope.
 - Config: one typed `Settings(BaseSettings)` via pydantic-settings. Import the settings object; never read `os.environ` scattered through code. App fails at startup if misconfigured. `.env.example` committed with dummies; `.env` never committed.
 - Errors: an `AppError` hierarchy (`TenantAccessError`, `NotFoundError`, `IngestionError`, `GuardrailRefusal`, ...) raised in service/agent layers, mapped centrally to RFC 9457 problem-details responses. Fail loudly: no bare `except`, no catch-and-return-200, no silent `pass`. Catch only what you can handle, log with context, re-raise or convert. The one expected-failure path is the ingestion DLQ.
@@ -57,9 +57,10 @@ Three layers. Unit (pure logic, agent wired with PydanticAI `TestModel`, no LLM)
 
 ## HARD SELF-REVIEW (do not skip)
 
-Before marking any unit of work done or opening a PR, run BOTH skills:
+Before marking any unit of work done or opening a PR, run ALL THREE skills on the diff:
 
 1. spec-review: does it match `BUILD_SPEC_LOCKED.md` and the day's artifact?
 2. senior-pass: clean architecture, DRY, typed, tested, no comment rot, real error handling, nothing mediocre.
+3. security-review: diff-driven application-security pass (auth, multi-tenant isolation, secrets, injection/SSRF, MCP token + no passthrough, error/info leak, abuse); BLOCKS on Critical/High.
 
-Work is NOT finished until both pass. If either flags something, fix it and re-run. No exceptions under deadline.
+Work is NOT finished until all three pass. If any flags something, fix it and re-run. No exceptions under deadline.

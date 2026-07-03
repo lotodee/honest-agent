@@ -19,10 +19,34 @@ class AppError(Exception):
         super().__init__(detail)
 
 
+class BadRequestError(AppError):
+    status_code = status.HTTP_400_BAD_REQUEST
+    title = "Bad Request"
+    problem_type = f"{_PROBLEM_BASE}/bad-request"
+
+
+class AuthenticationError(AppError):
+    status_code = status.HTTP_401_UNAUTHORIZED
+    title = "Authentication Failed"
+    problem_type = f"{_PROBLEM_BASE}/authentication"
+
+
+class RateLimitedError(AppError):
+    status_code = status.HTTP_429_TOO_MANY_REQUESTS
+    title = "Too Many Requests"
+    problem_type = f"{_PROBLEM_BASE}/rate-limited"
+
+
 class TenantAccessError(AppError):
     status_code = status.HTTP_403_FORBIDDEN
     title = "Tenant Access Denied"
     problem_type = f"{_PROBLEM_BASE}/tenant-access"
+
+
+class PayloadTooLargeError(AppError):
+    status_code = status.HTTP_413_CONTENT_TOO_LARGE
+    title = "Payload Too Large"
+    problem_type = f"{_PROBLEM_BASE}/payload-too-large"
 
 
 class NotFoundError(AppError):
@@ -53,18 +77,36 @@ class ProblemDetail(BaseModel):
     instance: str
 
 
-def _to_problem_response(request: Request, error: AppError) -> JSONResponse:
+def problem_response(
+    *,
+    status_code: int,
+    title: str,
+    problem_type: str,
+    detail: str,
+    instance: str,
+) -> JSONResponse:
+    """Build one RFC 9457 problem-details response. Used by handlers and middleware."""
     problem = ProblemDetail(
-        type=error.problem_type,
-        title=error.title,
-        status=error.status_code,
-        detail=error.detail,
-        instance=request.url.path,
+        type=problem_type,
+        title=title,
+        status=status_code,
+        detail=detail,
+        instance=instance,
     )
     return JSONResponse(
-        status_code=error.status_code,
+        status_code=status_code,
         content=problem.model_dump(),
         media_type="application/problem+json",
+    )
+
+
+def app_error_response(error: AppError, *, instance: str) -> JSONResponse:
+    return problem_response(
+        status_code=error.status_code,
+        title=error.title,
+        problem_type=error.problem_type,
+        detail=error.detail,
+        instance=instance,
     )
 
 
@@ -74,7 +116,7 @@ def register_error_handlers(app: FastAPI) -> None:
         # registered for AppError, so the narrow always holds. The fallback
         # re-raises so an unexpected type reaches the default 500 handler intact.
         if isinstance(exc, AppError):
-            return _to_problem_response(request, exc)
+            return app_error_response(exc, instance=request.url.path)
         raise exc
 
     app.add_exception_handler(AppError, handle_app_error)
