@@ -54,13 +54,9 @@ Three layers. Unit (pure logic, agent wired with PydanticAI `TestModel`, no LLM)
 - Small, focused modules: each capability in one package you can hold whole.
 - No comment rot. Meaningful names carry the what. Comment ONLY a non-obvious why (a workaround, a business rule, an ordering constraint). A comment that narrates the code is dead code; delete it. No dead code, no commented-out code.
 - Clear naming over cleverness. DRY and reusable.
-- Run the fast quick-gate before committing: `ruff check`, `ruff format --check`, `mypy`, unit tests. Keep `develop` green and deployable.
-- Git workflow (consistent, every time):
-  - Two long-lived branches: `main` (stable) and `develop` (integration). NEVER commit directly to `main` or `develop`.
-  - For every build day or feature, create a short-lived branch OFF `develop` (for example `day-3-pdf-spike`).
-  - Make ATOMIC commits: one logical change per commit, each with a clear, descriptive Conventional Commit message (`feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `ci`, ...), so anyone reading the history can follow exactly what happened, step by step.
-  - When the work is done and self-reviewed (CI quick-gate and integration green, and the three review skills pass), open a pull request against `develop`.
-  - Do NOT merge the pull request. Leave it open until the owner explicitly says to merge.
+- Run the fast quick-gate before committing: `ruff check`, `ruff format --check`, `mypy`, unit tests. Keep `main` and `develop` green and deployable.
+- Conventional Commits (`feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `ci`, ...). Make ATOMIC commits: one logical change per commit, each with a clear, descriptive message, so anyone can read the commit history neatly and follow what happened step by step.
+- Two long-lived branches: `main` (stable) and `develop` (integration). NEVER commit directly to `main` OR `develop`. This is a hard rule. For every build day or feature, create a short-lived branch OFF `develop` (for example `day-3-pdf-spike`). When the work is done and self-reviewed (CI quick-gate and integration green, and all three review skills pass), open a pull request against `develop`. Do NOT merge the PR yourself; leave it open until the owner explicitly says to merge. If `develop` does not exist yet, create it off `main` first. If you have been committing directly to a long-lived branch, stop and start branching from the current day.
 
 ## HARD SELF-REVIEW (do not skip)
 
