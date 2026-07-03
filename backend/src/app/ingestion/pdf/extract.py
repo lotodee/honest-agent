@@ -26,13 +26,18 @@ from app.ingestion.pdf.router import (
 )
 
 
+def _malformed(exc: Exception) -> ExtractionFailure:
+    # Only the exception TYPE name is recorded, never the message or file content,
+    # so the DLQ reason can never leak document contents. Both parse-failure sites
+    # go through here, so that safety rule lives in exactly one place.
+    return ExtractionFailure(reason=f"malformed: {type(exc).__name__}")
+
+
 def extract(pdf_path: str) -> ExtractionOk | ExtractionFailure:
     try:
         doc = fitz.open(pdf_path)
     except Exception as exc:  # noqa: BLE001  fitz.open surfaces many C-library errors on a poison file; any of them means "cannot parse"
-        # Only the exception TYPE name is recorded, never the message or file
-        # content, so the DLQ reason cannot leak document contents.
-        return ExtractionFailure(reason=f"malformed: {type(exc).__name__}")
+        return _malformed(exc)
     try:
         if doc.needs_pass:
             return ExtractionFailure(reason="encrypted")
@@ -49,7 +54,7 @@ def extract(pdf_path: str) -> ExtractionOk | ExtractionFailure:
                 for page in doc
             ]
         except Exception as exc:  # noqa: BLE001  a catchable per-page parse failure is still a poison document
-            return ExtractionFailure(reason=f"malformed: {type(exc).__name__}")
+            return _malformed(exc)
         return ExtractionOk(
             result=ExtractionResult(page_count=doc.page_count, pages=pages)
         )
