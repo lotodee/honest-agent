@@ -49,3 +49,8 @@ supabase/.temp/
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# --- Local planning / working docs / running memory (never committed) ---
+.planning/
+/Planning/
+/CodebasePrep/
