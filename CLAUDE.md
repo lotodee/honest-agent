@@ -58,10 +58,11 @@ Three layers. Unit (pure logic, agent wired with PydanticAI `TestModel`, no LLM)
 
 ## HARD SELF-REVIEW (do not skip)
 
-Before marking any unit of work done or opening a PR, run ALL THREE skills on the diff:
+Before marking any unit of work done or opening a PR, run ALL FOUR skills on the diff:
 
 1. spec-review: does it match `BUILD_SPEC_LOCKED.md` and the day's artifact?
 2. senior-pass: clean architecture, DRY, typed, tested, no comment rot, real error handling, nothing mediocre.
 3. security-review: diff-driven application-security pass (auth, multi-tenant isolation, secrets, injection/SSRF, MCP token + no passthrough, error/info leak, abuse); BLOCKS on Critical/High.
+4. question-pass: asks "why" about every choice, and captures every stub. Each stub in the diff must be in `docs/STUB_LEDGER.md` with its close condition, its real test, and a fail-closed guard, or this BLOCKS. It also names latent future problems and refuses anything trusted without a stated reason.
 
-Work is NOT finished until all three pass. If any flags something, fix it and re-run. No exceptions under deadline.
+Work is NOT finished until all four pass. If any flags something, fix it and re-run. No exceptions under deadline. Keep `docs/STUB_LEDGER.md` current: nothing leaves it until its real test is green.
