@@ -61,11 +61,20 @@ jobs:
       run:
         working-directory: backend
     env:
+      # DATABASE_URL is the owner connection (migrations only). APP_DATABASE_URL is
+      # the unprivileged app_user the tests connect as. The auth values are inert
+      # CI dummies: the integration tests do not verify real Supabase tokens.
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+      APP_DATABASE_URL: postgresql://app_user:app_user_local_pw@localhost:5432/postgres
       WEAVIATE_URL: http://localhost:8080
+      SUPABASE_JWT_ISSUER: http://localhost:54321/auth/v1
+      SUPABASE_JWKS_URL: http://localhost:54321/auth/v1/.well-known/jwks.json
+      MCP_SIGNING_SECRET: ci-integration-inert-dummy-value
     services:
       postgres:
-        image: postgres:16-alpine
+        # pgvector image: the chunks table needs the vector extension (plain
+        # postgres:*-alpine does not ship it).
+        image: pgvector/pgvector:pg17
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -103,6 +112,10 @@ jobs:
             fi
             sleep 2
           done
+      - name: Apply database migrations
+        # Versioned SQL applied as the owner before the tests, so CI reproduces the
+        # app_user role and the forced-RLS schema the isolation sweep asserts.
+        run: uv run python scripts/apply_migrations.py
       - name: Integration tests
         run: uv run pytest -m integration
 

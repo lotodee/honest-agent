@@ -6,6 +6,7 @@ import hmac
 import json
 import time
 
+import httpx
 import jwt
 import pytest
 from cryptography.hazmat.primitives import serialization
@@ -14,7 +15,12 @@ from jwt.algorithms import ECAlgorithm
 from starlette.requests import Request
 
 from app.core.errors import AuthenticationError
-from app.tenants.owner_auth import JwksKeyResolver, OwnerTokenVerifier, bearer_token
+from app.tenants.owner_auth import (
+    JwksKeyResolver,
+    OwnerTokenVerifier,
+    _jwks_fetch,
+    bearer_token,
+)
 
 ISSUER = "https://issuer.test/auth/v1"
 AUDIENCE = "authenticated"
@@ -241,3 +247,21 @@ def test_bearer_token_rejects_missing_or_malformed(headers: dict[str, str]) -> N
 
 def test_bearer_token_extracts_value() -> None:
     assert bearer_token(_request({"Authorization": "Bearer the-token"})) == "the-token"
+
+
+def test_jwks_fetch_surfaces_a_network_failure() -> None:
+    # The resolver is load-bearing; a JWKS endpoint that is unreachable or hangs
+    # must surface as an error (fetch is time-bounded), never a silent success.
+    fetch = _jwks_fetch("http://127.0.0.1:1/.well-known/jwks.json")
+    with pytest.raises(httpx.HTTPError):
+        fetch()
+
+
+def test_resolver_fails_closed_when_jwks_fetch_errors() -> None:
+    # If keys cannot be fetched, get() must RAISE, never return a key or None that
+    # would let verification proceed. No JWKS, no accepted token.
+    def failing_fetch() -> list[Jwk]:
+        raise TimeoutError("jwks endpoint timed out")
+
+    with pytest.raises(TimeoutError):
+        JwksKeyResolver(failing_fetch).get("key-1")

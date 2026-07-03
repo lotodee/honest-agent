@@ -14,6 +14,8 @@ dependencies = [
     "sentry-sdk[fastapi]",
     "httpx",
     "asyncpg>=0.31.0",
+    "weaviate-client>=4.16,<5",
+    "mcp>=1.27,<2",
 ]
 
 [dependency-groups]

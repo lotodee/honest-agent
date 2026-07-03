@@ -36,6 +36,16 @@ def _token(**overrides: object) -> str:
     return jwt.encode(claims, SECRET, algorithm="HS256")
 
 
+def test_mint_then_verify_round_trip() -> None:
+    # Mint with the same secret/issuer/audience the verifier trusts, then verify:
+    # the tenant survives the round trip and a re-mint still verifies.
+    for tenant in ("tenant-a", "tenant-b"):
+        token = mint_mcp_token(
+            secret=SECRET, issuer=ISSUER, audience=AUDIENCE, tenant_id=tenant
+        )
+        assert _verifier().verify(token).tenant_id == tenant
+
+
 def test_valid_token_resolves_tenant() -> None:
     context = _verifier().verify(
         mint_mcp_token(
