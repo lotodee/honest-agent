@@ -54,6 +54,18 @@ async def test_allowed_key_and_origin_resolves_tenant_and_query() -> None:
     assert context.query == "how do I export data?"
 
 
+async def test_widget_key_lookup_is_case_sensitive() -> None:
+    # A different-case key is a different key: it must not resolve the tenant.
+    with pytest.raises(AuthenticationError):
+        await _gate().authorize(
+            widget_key=KEY_A.upper(),
+            origin="https://tenant-a.example.com",
+            referer=None,
+            client_ip=None,
+            body=_body(query="hi"),
+        )
+
+
 async def test_unknown_key_rejected() -> None:
     with pytest.raises(AuthenticationError):
         await _gate().authorize(
