@@ -92,5 +92,5 @@ class TenantChunks:
         await self._collection.data.insert(properties=properties, vector=vector)
 
     async def count(self) -> int:
-        result = await self._collection.query.fetch_objects(limit=1000)
-        return len(result.objects)
+        result = await self._collection.aggregate.over_all(total_count=True)
+        return result.total_count or 0
