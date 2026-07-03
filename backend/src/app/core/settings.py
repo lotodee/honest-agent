@@ -41,9 +41,11 @@ class Settings(BaseSettings):
 
     # Gemini via Vertex AI is the only live model. The service-account JSON is the
     # one credential that can spend money, so it stays server-side and is None
-    # until provisioned.
+    # until provisioned. generation_model is the ONE place a model name lives
+    # (generation and vision description both read it, per architecture Delta 4);
+    # never hardcode a model string anywhere else.
     vertex_credentials_path: str | None = None
-    gemini_model: str = "gemini-2.5-flash"
+    generation_model: str = "google-cloud:gemini-3-flash"
 
     # Supabase keys. service_role bypasses RLS, so leaking it defeats tenant
     # isolation; it lives only in host env and CI secrets.

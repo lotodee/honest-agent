@@ -16,6 +16,7 @@ dependencies = [
     "asyncpg>=0.31.0",
     "weaviate-client>=4.16,<5",
     "mcp>=1.27,<2",
+    "pymupdf>=1.28.0",
 ]
 
 [dependency-groups]
@@ -70,10 +71,10 @@ init_forbid_extra = true
 init_typed = true
 warn_required_dynamic_aliases = true
 
-# asyncpg ships no type stubs or py.typed marker; allow the import without
-# weakening strictness anywhere else.
+# asyncpg and fitz (PyMuPDF) ship no type stubs or py.typed marker; allow the
+# imports without weakening strictness anywhere else.
 [[tool.mypy.overrides]]
-module = ["asyncpg.*"]
+module = ["asyncpg.*", "fitz.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
