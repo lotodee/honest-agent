@@ -1,0 +1,22 @@
+Day 2 tenant-isolation proof
+Command:  pytest tests/integration/test_tenant_isolation.py -v
+Captured: 2026-07-03 02:26 UTC, against real local Postgres (pgvector) + Weaviate
+Result:   customer B is blocked from reading AND writing customer A's data,
+          in the database (forced RLS + WITH CHECK) and the search index
+          (separate Weaviate shards); the sweep proves every tenant table
+          has its wall, and an unknown tenant hard-fails (auto-create off).
+
+============================= test session starts ==============================
+platform darwin -- Python 3.12.12, pytest-9.1.1, pluggy-1.6.0 -- /Users/loto/personal-projects/honest-agent/backend/.venv/bin/python3
+collecting ... collected 10 items
+tests/integration/test_tenant_isolation.py::test_every_app_table_has_forced_rls PASSED [ 10%]
+tests/integration/test_tenant_isolation.py::test_discovered_tenant_tables_are_all_covered PASSED [ 20%]
+tests/integration/test_tenant_isolation.py::test_cross_tenant_read_and_write_blocked[documents] PASSED [ 30%]
+tests/integration/test_tenant_isolation.py::test_cross_tenant_read_and_write_blocked[chunks] PASSED [ 40%]
+tests/integration/test_tenant_isolation.py::test_app_role_is_non_owner_and_non_bypassrls PASSED [ 50%]
+tests/integration/test_tenant_isolation.py::test_each_tenant_table_forces_row_security PASSED [ 60%]
+tests/integration/test_tenant_isolation.py::test_no_security_definer_functions_in_app_schema PASSED [ 70%]
+tests/integration/test_tenant_isolation.py::test_all_app_views_are_security_invoker PASSED [ 80%]
+tests/integration/test_tenant_isolation.py::test_weaviate_cross_tenant_read_blocked PASSED [ 90%]
+tests/integration/test_tenant_isolation.py::test_weaviate_unknown_tenant_hard_fails PASSED [100%]
+============================== 10 passed in 4.85s ==============================
