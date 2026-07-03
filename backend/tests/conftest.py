@@ -21,6 +21,7 @@ def _local_settings_env() -> None:
     # to look for.
     defaults = {
         "DATABASE_URL": "postgresql://localhost:5432/honest_agent_test",
+        "APP_DATABASE_URL": "postgresql://app_user:app_user_local_pw@localhost:5432/postgres",
         "WEAVIATE_URL": "http://localhost:8080",
         "SUPABASE_JWT_ISSUER": "http://127.0.0.1:54321/auth/v1",
         "SUPABASE_JWKS_URL": "http://127.0.0.1:54321/auth/v1/.well-known/jwks.json",

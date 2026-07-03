@@ -19,7 +19,21 @@ class Settings(BaseSettings):
     # Relational + auth (Supabase/Postgres, RLS forced). Required: the service
     # cannot answer for a tenant without its database, so a missing value must
     # fail loudly at startup rather than surface as a runtime error later.
+    #
+    # database_url is the OWNER connection, used ONLY to apply migrations (create
+    # roles/tables). The running app never holds it for tenant data.
     database_url: str
+
+    # app_database_url is the UNPRIVILEGED app_user connection the running service
+    # holds (non-owner, non-superuser, no BYPASSRLS). All tenant data goes through
+    # this pool via tenant_txn, so the app structurally cannot bypass RLS.
+    app_database_url: str
+
+    # The chunk embedding vector dimensionality. One committed value: the chunks
+    # migration is vector(768) and hand-seeded test vectors match. Real embeddings
+    # (Day 5) confirm the model; a different dim is an explicit migration, not a
+    # silent branch.
+    embedding_dim: int = 768
 
     # Vector store (Weaviate, multi-tenancy on, hybrid search). Required for the
     # same reason as the database.
