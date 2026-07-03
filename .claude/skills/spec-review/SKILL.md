@@ -11,8 +11,8 @@ You are reviewing a change against the LOCKED build spec for the flagship suppor
 
 Always re-read these before judging anything. Do not review from memory.
 
-1. Read `/Users/loto/Desktop/GEN/Planning/BUILD_SPEC_LOCKED.md` in full. This file wins on any conflict.
-2. Read the relevant section of `/Users/loto/Desktop/GEN/Planning/flagship_final_plan.md` for the part of the system the change touches (architecture in section 2, decisions in section 1, risks in section 3, the day plan in section 4).
+1. Read `./Planning/BUILD_SPEC_LOCKED.md` in full. This file wins on any conflict.
+2. Read the relevant section of `./Planning/flagship_final_plan.md` for the part of the system the change touches (architecture in section 2, decisions in section 1, risks in section 3, the day plan in section 4).
 
 If `BUILD_SPEC_LOCKED.md` and `flagship_final_plan.md` disagree, the LOCKED file wins, because it carries the owner's final adjustments.
 
