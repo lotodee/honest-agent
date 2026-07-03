@@ -3,7 +3,6 @@ AND in Weaviate. The Postgres sweep is dynamic, so a future table that forgets i
 wall fails this test by presence rather than by anyone remembering to add a case.
 """
 
-import asyncio
 import re
 from collections.abc import AsyncIterator
 
@@ -22,7 +21,12 @@ pytestmark = pytest.mark.integration
 TENANT_A = "11111111-1111-1111-1111-111111111111"
 TENANT_B = "22222222-2222-2222-2222-222222222222"
 UNKNOWN_TENANT = "99999999-9999-9999-9999-999999999999"
-EMBEDDING_DIM = get_settings().embedding_dim
+
+# The tenant-scoped tables the cross-tenant test parametrizes over. Kept static so
+# nothing connects to the database at collection time; a NEW tenant table that is
+# not added here is caught two ways: the dynamic forced-RLS sweep, and the
+# discovered-tables-are-all-covered test below (which fails until it is added).
+TENANT_TABLES = ("documents", "chunks")
 
 # Public tables that are intentionally NOT tenant-scoped (global public lookups).
 _SWEEP_ALLOWLIST = frozenset({"widget_keys"})
@@ -41,24 +45,6 @@ ORDER BY tablename
 """
 
 
-def discovered_tenant_tables() -> list[str]:
-    """Every public table carrying the tenant_isolation policy, discovered live.
-
-    Uses asyncio.run because it runs at COLLECTION time (the parametrize decorator),
-    where no event loop is running. Async tests use `_tenant_tables` on the pool.
-    """
-
-    async def fetch() -> list[str]:
-        conn = await asyncpg.connect(dsn=get_settings().app_database_url)
-        try:
-            rows = await conn.fetch(_TENANT_TABLES_QUERY)
-            return [row["tablename"] for row in rows]
-        finally:
-            await conn.close()
-
-    return asyncio.run(fetch())
-
-
 async def _tenant_tables(pool: asyncpg.Pool) -> list[str]:
     rows = await pool.fetch(_TENANT_TABLES_QUERY)
     return [row["tablename"] for row in rows]
@@ -67,7 +53,8 @@ async def _tenant_tables(pool: asyncpg.Pool) -> list[str]:
 def _vector_literal() -> str:
     # A deterministic placeholder of the correct dimensionality. Real embeddings
     # (Day 5) replace these; Day 2 only needs a well-shaped vector to store.
-    return "[" + ",".join(str((i % 97) / 97.0) for i in range(EMBEDDING_DIM)) + "]"
+    dim = get_settings().embedding_dim
+    return "[" + ",".join(str((i % 97) / 97.0) for i in range(dim)) + "]"
 
 
 async def _seed_row(conn: asyncpg.Connection, table: str, tenant_id: str) -> None:
@@ -124,7 +111,16 @@ async def test_every_app_table_has_forced_rls(db_pool: asyncpg.Pool) -> None:
     assert not unprotected, f"public tables without FORCED RLS: {unprotected}"
 
 
-@pytest.mark.parametrize("table", discovered_tenant_tables())
+async def test_discovered_tenant_tables_are_all_covered(db_pool: asyncpg.Pool) -> None:
+    # A new tenant table (one with the tenant_isolation policy) that is not added to
+    # TENANT_TABLES fails here, so the cross-tenant proof can never silently skip it.
+    discovered = set(await _tenant_tables(db_pool))
+    assert discovered == set(TENANT_TABLES), (
+        f"discovered {discovered} but the cross-tenant test covers {set(TENANT_TABLES)}"
+    )
+
+
+@pytest.mark.parametrize("table", TENANT_TABLES)
 async def test_cross_tenant_read_and_write_blocked(
     db_pool: asyncpg.Pool, _clean_tenant_tables: None, table: str
 ) -> None:
@@ -210,7 +206,7 @@ async def test_weaviate_cross_tenant_read_blocked(
         document_id="doc-a",
         chunk_index=0,
         text="visible only to tenant A",
-        vector=[0.1] * EMBEDDING_DIM,
+        vector=[0.1] * get_settings().embedding_dim,
     )
     assert await tenant_a.count() >= 1  # A sees its own object
     assert await tenant_b.count() == 0  # B never sees A's object through its handle
