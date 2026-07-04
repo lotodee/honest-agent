@@ -23,6 +23,7 @@ from app.mcp.server import (
 )
 from app.retrieval.router import router as retrieval_router
 from app.tenants.gate import VisitorGate, install_visitor_gate
+from app.tenants.owner_gate import install_owner_body_cap
 from app.tenants.rate_limit import AllowAllRateLimiter
 from app.tenants.router import router as tenants_router
 from app.tenants.widget_keys import PostgresWidgetKeyStore
@@ -73,6 +74,8 @@ def create_app() -> FastAPI:
     configure_observability(app, settings)
     register_error_handlers(app)
     install_visitor_gate(app, lambda: _visitor_gate(app, settings))
+    # Owner routes share the visitor door's body-size cap (defense-in-depth).
+    install_owner_body_cap(app, settings.visitor_max_body_bytes)
     for router in _DOMAIN_ROUTERS:
         app.include_router(router, prefix="/v1")
     app.mount(
