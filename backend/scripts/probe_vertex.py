@@ -53,7 +53,7 @@ def main() -> int:
     from google.genai import types
     from google.oauth2 import service_account
 
-    creds = service_account.Credentials.from_service_account_info(
+    creds = service_account.Credentials.from_service_account_info(  # type: ignore[no-untyped-call]
         json.loads(base64.b64decode(b64)), scopes=list(_SCOPES)
     )
     print(
@@ -82,6 +82,8 @@ def main() -> int:
                 contents="ping",
                 config=types.EmbedContentConfig(output_dimensionality=EMB_DIM),
             )
+            if not result.embeddings or result.embeddings[0].values is None:
+                raise ValueError("no embedding returned")
             values = result.embeddings[0].values
             norm = math.sqrt(sum(x * x for x in values))
             emb = f"OK dim={len(values)} norm={norm:.2f}"
@@ -90,7 +92,7 @@ def main() -> int:
 
         rows.append((loc, gen, emb))
         if gen.startswith("ERR") or emb.startswith("ERR"):
-            ids = [m.name.split("/")[-1] for m in client.models.list()]
+            ids = [m.name.split("/")[-1] for m in client.models.list() if m.name]
             print(f"[{loc}] {len(ids)} models: {', '.join(ids)}")
 
     print(f"\n{'location':<14} {f'gen({GEN_MODEL})':<26} embed({EMB_MODEL}@{EMB_DIM})")
