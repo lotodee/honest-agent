@@ -49,3 +49,16 @@ async def test_ingestion_path_is_not_capped() -> None:
         response = await client.post("/v1/ingestion/echo", content=b"x" * (_CAP + 500))
     assert response.status_code == 200
     assert response.json() == {"door": "ingestion"}
+
+
+async def test_overlong_content_length_is_clean_400_not_500() -> None:
+    # A crafted all-digit Content-Length past CPython's 4300-digit int() limit passes
+    # str.isdigit() but would make int() raise. That must surface as a clean RFC 9457
+    # 400, never fall through to an unauthenticated generic 500.
+    async with await _client(_app()) as client:
+        response = await client.post(
+            "/v1/tenants/echo", headers={"content-length": "1" * 4301}, content=b""
+        )
+    assert response.status_code == 400
+    assert response.headers["content-type"].startswith("application/problem+json")
+    assert response.json()["status"] == 400

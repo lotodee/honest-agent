@@ -14,7 +14,8 @@ is header-driven and handled in owner_auth's resolver).
 from fastapi import FastAPI, Request, Response
 from starlette.middleware.base import RequestResponseEndpoint
 
-from app.core.errors import PayloadTooLargeError, app_error_response
+from app.core.content_length import parse_content_length
+from app.core.errors import AppError, PayloadTooLargeError, app_error_response
 
 # The owner-door route surface today. Scoped deliberately: the ingestion upload path
 # (/v1/ingestion, Days 3-4) carries large PDFs and must NOT inherit this small cap.
@@ -27,12 +28,13 @@ def install_owner_body_cap(app: FastAPI, max_body_bytes: int) -> None:
         request: Request, call_next: RequestResponseEndpoint
     ) -> Response:
         if request.url.path.startswith(OWNER_PATH_PREFIX):
-            declared = request.headers.get("content-length")
-            if (
-                declared is not None
-                and declared.isdigit()
-                and int(declared) > max_body_bytes
-            ):
+            try:
+                declared = parse_content_length(request.headers.get("content-length"))
+            except AppError as exc:
+                # Malformed length (non-digit, or so long int() would raise): a bad
+                # request, not a 500. Surface it through the RFC 9457 handler.
+                return app_error_response(exc, instance=request.url.path)
+            if declared is not None and declared > max_body_bytes:
                 return app_error_response(
                     PayloadTooLargeError("declared body exceeds the owner limit"),
                     instance=request.url.path,
