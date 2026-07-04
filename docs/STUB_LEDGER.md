@@ -8,7 +8,7 @@ Rule for every stub: it must (a) sit behind a clean seam, (b) name the day or co
 
 | # | Stub | File | Stands in for | Closes on | Real test that proves it | Fail-closed guard |
 |---|------|------|---------------|-----------|--------------------------|-------------------|
-| 1 | Vision describer (`StubVisionDescriber`) | `ingestion/pdf/router.py` | The live Gemini vision description of an image or vector page | Day 4 (ingestion goes live, Vertex provisioned) | A credential-gated integration test renders a real image page and asserts a real, non-placeholder description comes back from Gemini | IMMEDIATE (before Day 4): with no Vertex credential in a non-test run, RAISE, do not return placeholder text |
+| 1 | Vision describer (`StubVisionDescriber`) | `ingestion/pdf/router.py` | The live `gemini-3.5-flash` (at location `global`, per ADR-0007) vision description of an image or vector page | Day 4 (ingestion goes live, Vertex provisioned) | A credential-gated integration test renders a real image page and asserts a real, non-placeholder description comes back from Gemini | IMMEDIATE (before Day 4): with no Vertex credential in a non-test run, RAISE, do not return placeholder text |
 | 2 | `retrieve` | `retrieval/service.py` | Real tenant-scoped hybrid search in Weaviate | Day 5 | Integration test retrieves seeded chunks from a tenant's shard, and proves it cannot see another tenant's | A missing handle or empty index raises or returns an explicit empty-with-reason, never a fake source |
 | 3 | `answer` (grounding + refusal) | `agent/service.py` | Real grounded answer with a faithfulness verdict, and an honest refusal | Day 6 | A grounded question returns a sourced answer; an off-corpus question returns an honest refusal; both asserted against real retrieval | The verdict is always computed from real retrieved chunks, never hard-coded |
 | 4 | Rate limiter (`AllowAllRateLimiter`) | `tenants/rate_limit.py` | Real per-key and per-IP rate limiting | Day 11 | Exceeding the limit returns 429; within the limit passes; both asserted | Decide and record fail-open vs fail-closed on a limiter-backend failure |
@@ -18,7 +18,7 @@ Stub #1 currently returns placeholder text when Vertex is absent. That is the on
 
 ## Also not-yet-built (not stubs, just absent — tracked so they are not forgotten)
 These are not fakes sitting in the code; they simply do not exist yet and are scheduled. Listed so nothing is silently skipped.
-- Embeddings (`gemini-embedding-001` via Vertex) — built and used for real on Day 4 (chunk embedding into Weaviate).
+- Embeddings (`gemini-embedding-001` via Vertex, at `output_dimensionality=768` + L2-normalized to fit `chunks.embedding vector(768)`, per ADR-0007) — built and used for real on Day 4 (chunk embedding into Weaviate).
 - Generation model (`GoogleModel` via Vertex) — built and used for real on Day 5 (the agent).
 - Guardrails (pre-screen, spotlighting, faithfulness) — Day 6.
 - Eval gate (three-lane) — Day 7. Dashboard/deploy — Day 9. Widget — Day 10.

@@ -13,7 +13,7 @@ import weaviate
 from weaviate.exceptions import WeaviateBaseError
 
 from app.core.db import tenant_txn
-from app.core.settings import get_settings
+from app.core.settings import EMBEDDING_DIM, get_settings
 from app.retrieval.weaviate import TenantChunks, bootstrap_chunks, connect
 
 pytestmark = pytest.mark.integration
@@ -53,7 +53,7 @@ async def _tenant_tables(pool: asyncpg.Pool) -> list[str]:
 def _vector_literal() -> str:
     # A deterministic placeholder of the correct dimensionality. Real embeddings
     # (Day 5) replace these; Day 2 only needs a well-shaped vector to store.
-    dim = get_settings().embedding_dim
+    dim = EMBEDDING_DIM
     return "[" + ",".join(str((i % 97) / 97.0) for i in range(dim)) + "]"
 
 
@@ -206,7 +206,7 @@ async def test_weaviate_cross_tenant_read_blocked(
         document_id="doc-a",
         chunk_index=0,
         text="visible only to tenant A",
-        vector=[0.1] * get_settings().embedding_dim,
+        vector=[0.1] * EMBEDDING_DIM,
     )
     assert await tenant_a.count() >= 1  # A sees its own object
     assert await tenant_b.count() == 0  # B never sees A's object through its handle
