@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from fastapi import FastAPI, Request, Response
 from starlette.middleware.base import RequestResponseEndpoint
 
+from app.core.content_length import parse_content_length
 from app.core.errors import (
     AppError,
     AuthenticationError,
@@ -102,12 +103,13 @@ def install_visitor_gate(app: FastAPI, provide_gate: Callable[[], VisitorGate]) 
             return await call_next(request)
         gate = provide_gate()
         instance = request.url.path
-        declared = request.headers.get("content-length")
-        if (
-            declared is not None
-            and declared.isdigit()
-            and int(declared) > gate.max_body_bytes
-        ):
+        try:
+            declared = parse_content_length(request.headers.get("content-length"))
+        except AppError as exc:
+            # Malformed length (non-digit, or so long int() would raise): a bad request,
+            # not a 500. This is the zero-auth door, so surface it cleanly via RFC 9457.
+            return app_error_response(exc, instance=instance)
+        if declared is not None and declared > gate.max_body_bytes:
             return app_error_response(
                 PayloadTooLargeError("declared body exceeds the visitor limit"),
                 instance=instance,

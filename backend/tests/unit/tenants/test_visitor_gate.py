@@ -4,6 +4,8 @@ import dataclasses
 import json
 
 import pytest
+from fastapi import FastAPI
+from httpx import ASGITransport, AsyncClient
 
 from app.core.errors import (
     AuthenticationError,
@@ -11,7 +13,7 @@ from app.core.errors import (
     RateLimitedError,
     TenantAccessError,
 )
-from app.tenants.gate import VisitorGate
+from app.tenants.gate import VisitorGate, install_visitor_gate
 from app.tenants.rate_limit import AllowAllRateLimiter, RateLimiter
 from app.tenants.widget_keys import InMemoryWidgetKeyStore, WidgetKeyRecord
 
@@ -224,3 +226,30 @@ async def test_rate_limited_request_rejected() -> None:
             client_ip=None,
             body=_body(query="hi"),
         )
+
+
+def _gate_app() -> FastAPI:
+    app = FastAPI()
+    gate = _gate()
+    install_visitor_gate(app, lambda: gate)
+
+    @app.post("/v1/widget/answer")
+    async def _answer() -> dict[str, str]:
+        return {"door": "visitor"}
+
+    return app
+
+
+async def test_overlong_content_length_is_clean_400_not_500() -> None:
+    # The identical Content-Length -> int() bug as the owner gate, on the more-exposed
+    # zero-auth visitor door: an all-digit value past CPython's 4300-digit int() limit
+    # passes str.isdigit() but breaks int(). The middleware precheck runs before its
+    # try/except, so unfixed it is a raw 500; it must be a clean RFC 9457 400.
+    transport = ASGITransport(app=_gate_app())
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/v1/widget/answer", headers={"content-length": "1" * 4301}, content=b""
+        )
+    assert response.status_code == 400
+    assert response.headers["content-type"].startswith("application/problem+json")
+    assert response.json()["status"] == 400
