@@ -1,11 +1,17 @@
 # --- Secrets and local env (never commit) ---
+# Each component gets its own gitignored env (backend/.env, dashboard/.env,
+# widget/.env). backend/.env holds server-only secrets and is never shared.
 .env
 .env.*
+**/.env
+**/.env.*
 !.env.example
+!**/.env.example
 *.local
-# Vertex service-account JSON and any credential blobs
+# Vertex service-account JSON and any credential blobs (the base64 lives in .env)
 *service-account*.json
 *credentials*.json
+project-*.json
 
 # --- Python ---
 .venv/
