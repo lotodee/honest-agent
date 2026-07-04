@@ -14,7 +14,7 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from jwt.algorithms import ECAlgorithm
 from starlette.requests import Request
 
-from app.core.errors import AuthenticationError
+from app.core.errors import AuthenticationError, ServiceUnavailableError
 from app.tenants.owner_auth import (
     JwksKeyResolver,
     OwnerTokenVerifier,
@@ -290,9 +290,32 @@ def test_jwks_fetch_surfaces_a_network_failure() -> None:
 
 def test_resolver_fails_closed_when_jwks_fetch_errors() -> None:
     # If keys cannot be fetched, get() must RAISE, never return a key or None that
-    # would let verification proceed. No JWKS, no accepted token.
+    # would let verification proceed. No JWKS, no accepted token. The raw fetch
+    # failure is converted to a clean, retryable 503 (not a raw exception → 500).
     def failing_fetch() -> list[Jwk]:
         raise TimeoutError("jwks endpoint timed out")
 
-    with pytest.raises(TimeoutError):
+    with pytest.raises(ServiceUnavailableError):
         JwksKeyResolver(failing_fetch).get("key-1")
+
+
+def test_failing_jwks_endpoint_raises_clean_503_and_is_still_throttled() -> None:
+    # A down/hanging JWKS endpoint on the FIRST hit must surface a mapped
+    # ServiceUnavailableError (RFC 9457 renders it), never a raw httpx exception that
+    # falls through to a generic 500. And because the attempt is stamped before the
+    # fetch, a second miss within the cooldown is throttled: no second outbound call.
+    fetches = {"n": 0}
+
+    def failing_fetch() -> list[Jwk]:
+        fetches["n"] += 1
+        raise httpx.ConnectError("jwks endpoint refused the connection")
+
+    resolver = JwksKeyResolver(
+        failing_fetch, cooldown_seconds=300.0, clock=lambda: 1000.0
+    )
+    with pytest.raises(ServiceUnavailableError):
+        resolver.get("key-1")
+    assert fetches["n"] == 1
+    with pytest.raises(AuthenticationError):
+        resolver.get("key-2")  # throttled: clean reject, no second fetch
+    assert fetches["n"] == 1
