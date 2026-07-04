@@ -34,20 +34,26 @@ class Settings(BaseSettings):
     # this pool via tenant_txn, so the app structurally cannot bypass RLS.
     app_database_url: str
 
-    # The chunk embedding vector dimensionality. One committed value: the chunks
-    # migration is vector(768) and hand-seeded test vectors match. Real embeddings
-    # (Day 5) confirm the model; a different dim is an explicit migration, not a
-    # silent branch.
-    embedding_dim: int = 768
+    # The chunk embedding vector dimensionality. gemini-embedding-001 natively returns
+    # 3072; the embed call (wired Day 4) requests output_dimensionality=768 and
+    # L2-normalizes, so it fits the chunks.embedding vector(768) column. Env-overridable
+    # (EMBEDDING_DIM), but changing it is NOT a free flip like the generation model:
+    # it needs a chunks.embedding vector(N) migration AND re-embedding (ADR-0007).
+    embedding_dim: int = 768  # env: EMBEDDING_DIM
 
     # Vector store (Weaviate, multi-tenancy on, hybrid search). Required for the
     # same reason as the database.
     weaviate_url: str
 
-    # Gemini via Vertex AI is the only live model. generation_model is the ONE place
-    # a model name lives (generation and vision description both read it, per
-    # architecture Delta 4); never hardcode a model string anywhere else.
-    generation_model: str = "google-cloud:gemini-3-flash"
+    # Gemini via Vertex AI is the only live model. These names are code-defaulted but
+    # ENV-OVERRIDABLE (a field is overridden by its uppercase env var automatically),
+    # so switching a model is just setting GENERATION_MODEL / EMBEDDING_MODEL. Defaults
+    # are the Vertex pre-flight's verified ids (ADR-0007): the intended "gemini-3-flash"
+    # does not exist, so gemini-3.5-flash (served at location "global") is the real
+    # current flash. generation_model is the ONE place a generation/vision model name
+    # lives; never hardcode a model string anywhere else.
+    generation_model: str = "google-cloud:gemini-3.5-flash"  # env: GENERATION_MODEL
+    embedding_model: str = "gemini-embedding-001"  # env: EMBEDDING_MODEL
 
     # The Vertex service-account credential. google_credentials_b64 is the deploy
     # path: the SA JSON delivered as base64 in the env, because a free-tier container
@@ -56,7 +62,9 @@ class Settings(BaseSettings):
     # the Vertex client. vertex_credentials_path is the alternative local file path.
     google_credentials_b64: str | None = None
     gcp_project: str | None = None
-    gcp_location: str = "us-central1"
+    # "global" serves the Gemini-3 family (gemini-3.5-flash) AND embeddings; the
+    # regional fallback (documented only, ADR-0007) is us-central1 + gemini-2.5-flash.
+    gcp_location: str = "global"  # env: GCP_LOCATION
     vertex_credentials_path: str | None = None
 
     # Supabase keys. service_role bypasses RLS, so leaking it defeats tenant
