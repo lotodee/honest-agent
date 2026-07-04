@@ -10,8 +10,9 @@ Corrects ARCHITECTURE.md Delta 4, whose recommended `gemini-3-flash` does not ex
 
 ## Context
 
-A local Vertex pre-flight (a throwaway probe against our real GCP project) tried the
-intended `gemini-3-flash` and got a 404 in every candidate location. `models.list()`
+A local Vertex pre-flight (`scripts/probe_vertex.py`, credential-gated, run against our
+real GCP project) tried the intended `gemini-3-flash` and got a 404 in every candidate
+location. `models.list()`
 showed the real ids: the Gemini-3 flash family (`gemini-3.5-flash`,
 `gemini-3-flash-preview`, `gemini-3.1-flash-lite`) is served **only at location
 `global`**; the regional locations tried (us-central1, us-east4, us-east5,
@@ -32,18 +33,32 @@ embedding MUST be re-normalized before use.
 - **Regional fallback (documented only, not wired):** `us-central1` +
   `gemini-2.5-flash`, for when global routing or data residency requires a region.
 - **Code-defaulted but env-overridable** in `core/settings.py`: `generation_model`
-  (`GENERATION_MODEL`), `embedding_model` (`EMBEDDING_MODEL`), `gcp_location`
-  (`GCP_LOCATION`), `embedding_dim` (`EMBEDDING_DIM`). A field is overridden by its
-  uppercase env var automatically, so switching a model is one env var. Model names
-  live ONLY in Settings.
+  (`GENERATION_MODEL`), `embedding_model` (`EMBEDDING_MODEL`), and `gcp_location`
+  (`GCP_LOCATION`). A field is overridden by its uppercase env var automatically, so
+  switching a model is one env var. Model names live ONLY in Settings.
+- **The embedding dimension is NOT env-overridable.** It is a fixed module constant,
+  `core/settings.py:EMBEDDING_DIM = 768`, because it is coupled 1:1 to the
+  `chunks.embedding vector(N)` column and must never drift at runtime. A schema-match
+  unit test parses `0003_chunks.sql` and asserts the column's `vector(N)` equals the
+  constant, so any drift fails CI.
 
 ## Consequences
 
 - The invalid `gemini-3-flash` default is fixed; a wrong model id is now a config
   value, not a surprise 404 on the first real call.
-- `generation_model` and `gcp_location` are free to flip via env. `embedding_dim` is
-  NOT a free flip: changing it requires migrating the `chunks.embedding vector(N)`
-  column and re-embedding every chunk, so it is called out as a heavier change.
+- `generation_model` and `gcp_location` are free to flip via env. `embedding_dim` is a
+  pinned constant guarded by the schema-match test; changing it is a coordinated
+  code + migration + re-embed change, never a runtime env flip.
 - Day 4's embed call MUST pass `output_dimensionality=768` and normalize; a raw
   `gemini-embedding-001` call returns 3072 and would fail to insert into `vector(768)`.
 - Supersedes ARCHITECTURE.md Delta 4's `gemini-3-flash` recommendation.
+
+## Rechecking this decision
+
+- `scripts/probe_vertex.py` reproduces the pre-flight on demand: credential-gated
+  (reads `GOOGLE_CREDENTIALS_B64` / `GCP_PROJECT` from the env, never runs in CI, never
+  prints the credential), it lists model availability per location and confirms
+  `gemini-3.5-flash` at `global` and the `gemini-embedding-001` dimensions. Anyone can
+  re-verify the claims above with it.
+- Day 4's credential-gated vision integration test is the AUTOMATED recheck of the live
+  path: a real image page must return a real, non-placeholder description.
