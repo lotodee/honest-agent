@@ -21,7 +21,7 @@ _CHUNKS_MIGRATION = (
 
 
 def test_model_defaults_are_the_preflight_ids() -> None:
-    settings = Settings(_env_file=None)  # type: ignore[call-arg]
+    settings = Settings(_env_file=None)
     assert settings.generation_model == "google-cloud:gemini-3.5-flash"
     assert settings.embedding_model == "gemini-embedding-001"
     assert settings.gcp_location == "global"
@@ -29,7 +29,7 @@ def test_model_defaults_are_the_preflight_ids() -> None:
 
 def test_invalid_gemini_3_flash_is_never_the_default() -> None:
     # Regression guard: the pre-flight proved this id 404s in every location.
-    assert Settings(_env_file=None).generation_model != "google-cloud:gemini-3-flash"  # type: ignore[call-arg]
+    assert Settings(_env_file=None).generation_model != "google-cloud:gemini-3-flash"
 
 
 def test_model_names_and_location_are_env_overridable(
@@ -38,7 +38,7 @@ def test_model_names_and_location_are_env_overridable(
     monkeypatch.setenv("GENERATION_MODEL", "google-cloud:gemini-2.5-flash")
     monkeypatch.setenv("EMBEDDING_MODEL", "text-embedding-005")
     monkeypatch.setenv("GCP_LOCATION", "us-central1")
-    settings = Settings(_env_file=None)  # type: ignore[call-arg]
+    settings = Settings(_env_file=None)
     assert settings.generation_model == "google-cloud:gemini-2.5-flash"
     assert settings.embedding_model == "text-embedding-005"
     assert settings.gcp_location == "us-central1"
@@ -51,7 +51,7 @@ def test_embedding_dim_is_a_constant_not_env_overridable(
     # drift from the chunks.embedding column.
     monkeypatch.setenv("EMBEDDING_DIM", "1536")
     assert EMBEDDING_DIM == 768
-    assert not hasattr(Settings(_env_file=None), "embedding_dim")  # type: ignore[call-arg]
+    assert not hasattr(Settings(_env_file=None), "embedding_dim")
 
 
 def test_embedding_dim_matches_the_chunks_migration() -> None:
