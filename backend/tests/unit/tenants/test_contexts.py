@@ -13,9 +13,7 @@ def test_three_contexts_are_distinct_types() -> None:
     owner = OwnerRequestContext(tenant_id="tenant-a", user_id="user-1")
     visitor = VisitorRequestContext(tenant_id="tenant-a", query="hello")
     external = ExternalCallerContext(tenant_id="tenant-a")
-    assert type(owner) is not type(visitor)
-    assert type(visitor) is not type(external)
-    assert type(owner) is not type(external)
+    assert len({type(owner), type(visitor), type(external)}) == 3
     assert owner.tenant_id == visitor.tenant_id == external.tenant_id == "tenant-a"
 
 
