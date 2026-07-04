@@ -27,37 +27,82 @@ JwksFetcher = Callable[[], list[dict[str, object]]]
 _ALGORITHMS = ("ES256",)
 _CLOCK_SKEW_LEEWAY_SECONDS = 10
 _JWKS_FETCH_TIMEOUT_SECONDS = 5.0
+_JWKS_REFRESH_COOLDOWN_SECONDS = 300.0
+# Cap the negative cache so a flood of distinct random kids cannot grow it without
+# bound; the cooldown throttle already bounds outbound fetches, this just bounds memory.
+_NEGATIVE_CACHE_MAX_ENTRIES = 1024
 
 
 class JwksKeyResolver:
-    """Resolve a signing key by `kid`, caching the JWKS and refetching once on a
-    miss so a Supabase key rotation does not need a redeploy.
+    """Resolve a signing key by `kid`, caching the JWKS and refetching on a miss so a
+    Supabase key rotation does not need a redeploy.
 
-    It never fetches per request (that would be a DoS and SSRF footgun) and never
-    falls back to trying every key on an unknown `kid`.
+    Refetches are THROTTLED to at most one per `cooldown_seconds`. Without this, an
+    anonymous caller sending tokens bearing random `kid`s (read from the *unverified*
+    header) would force one outbound JWKS fetch per request, saturating the threadpool
+    and flooding the JWKS endpoint. An unknown `kid` seen within the cooldown is
+    remembered in a small bounded negative cache so repeats reject with no work, and a
+    throttled miss rejects without fetching. A genuinely rotated `kid` is still picked
+    up on the first miss after the cooldown.
+
+    It never fetches per request and never falls back to trying every key on a miss.
     """
 
-    def __init__(self, fetch: JwksFetcher) -> None:
+    def __init__(
+        self,
+        fetch: JwksFetcher,
+        *,
+        cooldown_seconds: float = _JWKS_REFRESH_COOLDOWN_SECONDS,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
         self._fetch = fetch
         self._keys: dict[str, PyJWK] = {}
+        self._cooldown = cooldown_seconds
+        # monotonic clock: a wall-clock adjustment must not widen or collapse the
+        # cooldown window. -inf so the first miss always refreshes.
+        self._clock = clock
+        self._last_refresh = float("-inf")
+        self._unknown_kids: dict[str, float] = {}
 
     def get(self, kid: str) -> PyJWK:
         key = self._keys.get(kid)
         if key is not None:
             return key
-        self._refresh()
-        rotated = self._keys.get(kid)
-        if rotated is None:
+        now = self._clock()
+        seen_at = self._unknown_kids.get(kid)
+        if seen_at is not None and now - seen_at < self._cooldown:
             raise AuthenticationError("unknown token signing key")
-        return rotated
+        if now - self._last_refresh >= self._cooldown:
+            self._refresh(now)
+            rotated = self._keys.get(kid)
+            if rotated is not None:
+                return rotated
+        self._remember_unknown(kid, now)
+        raise AuthenticationError("unknown token signing key")
 
-    def _refresh(self) -> None:
+    def _refresh(self, now: float) -> None:
+        # Record the attempt BEFORE fetching, so a failing/hanging JWKS endpoint is
+        # throttled too and cannot itself become the amplification vector.
+        self._last_refresh = now
         keys: dict[str, PyJWK] = {}
         for entry in self._fetch():
             kid = entry.get("kid")
             if isinstance(kid, str) and kid:
                 keys[kid] = PyJWK.from_dict(entry)
         self._keys = keys
+        # Fresh JWKS may contain a kid we just rejected; drop stale negatives so a
+        # rotated key is never shadowed by an earlier miss.
+        self._unknown_kids.clear()
+
+    def _remember_unknown(self, kid: str, now: float) -> None:
+        if len(self._unknown_kids) >= _NEGATIVE_CACHE_MAX_ENTRIES:
+            cutoff = now - self._cooldown
+            self._unknown_kids = {
+                k: seen for k, seen in self._unknown_kids.items() if seen >= cutoff
+            }
+            if len(self._unknown_kids) >= _NEGATIVE_CACHE_MAX_ENTRIES:
+                self._unknown_kids.clear()
+        self._unknown_kids[kid] = now
 
 
 class OwnerTokenVerifier:
@@ -137,7 +182,10 @@ def _jwks_fetch(jwks_url: str) -> JwksFetcher:
 
 def build_owner_verifier(settings: Settings) -> OwnerTokenVerifier:
     return OwnerTokenVerifier(
-        resolver=JwksKeyResolver(_jwks_fetch(settings.supabase_jwks_url)),
+        resolver=JwksKeyResolver(
+            _jwks_fetch(settings.supabase_jwks_url),
+            cooldown_seconds=settings.owner_jwks_refresh_cooldown_seconds,
+        ),
         issuer=settings.supabase_jwt_issuer,
         audience=settings.supabase_jwt_audience,
     )

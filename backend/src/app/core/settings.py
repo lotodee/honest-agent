@@ -81,6 +81,12 @@ class Settings(BaseSettings):
     supabase_jwt_issuer: str
     supabase_jwks_url: str
     supabase_jwt_audience: str = "authenticated"
+    # An unknown `kid` (read from the unverified token header) triggers a JWKS
+    # refetch. This bounds those refetches to at most one per this many seconds, so an
+    # anonymous flood of random-kid tokens cannot amplify into one outbound fetch per
+    # request against Supabase's JWKS endpoint. A rotated key is picked up on the first
+    # miss after the cooldown.
+    owner_jwks_refresh_cooldown_seconds: float = 300.0
 
     # MCP door: the self-minted external-caller token. The signing secret is a
     # crown jewel (server-side only) and is required. The issuer and audience are
