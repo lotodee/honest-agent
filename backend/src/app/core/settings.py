@@ -10,6 +10,14 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # the repo-root .env is never loaded. No frontend build can ever share this file.
 _BACKEND_ENV = Path(__file__).resolve().parents[3] / ".env"
 
+# The chunk embedding dimensionality. Deliberately a FIXED module constant, NOT a
+# Settings field: it is coupled 1:1 to the chunks.embedding vector(N) column, so it
+# must never be a runtime env flip. gemini-embedding-001 returns 3072 natively; the
+# embed call (wired Day 4) requests output_dimensionality=768 and L2-normalizes to
+# fit vector(768). Changing this is a coordinated code + migration + re-embed change,
+# and a schema-match test asserts it equals the migration's vector(N) (ADR-0007).
+EMBEDDING_DIM = 768
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -33,13 +41,6 @@ class Settings(BaseSettings):
     # holds (non-owner, non-superuser, no BYPASSRLS). All tenant data goes through
     # this pool via tenant_txn, so the app structurally cannot bypass RLS.
     app_database_url: str
-
-    # The chunk embedding vector dimensionality. gemini-embedding-001 natively returns
-    # 3072; the embed call (wired Day 4) requests output_dimensionality=768 and
-    # L2-normalizes, so it fits the chunks.embedding vector(768) column. Env-overridable
-    # (EMBEDDING_DIM), but changing it is NOT a free flip like the generation model:
-    # it needs a chunks.embedding vector(N) migration AND re-embedding (ADR-0007).
-    embedding_dim: int = 768  # env: EMBEDDING_DIM
 
     # Vector store (Weaviate, multi-tenancy on, hybrid search). Required for the
     # same reason as the database.
