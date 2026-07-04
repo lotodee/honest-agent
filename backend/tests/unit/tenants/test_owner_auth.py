@@ -4,6 +4,7 @@ import base64
 import hashlib
 import hmac
 import json
+import threading
 import time
 
 import httpx
@@ -217,6 +218,42 @@ def test_unknown_kid_flood_triggers_at_most_one_jwks_fetch() -> None:
         with pytest.raises(AuthenticationError):
             verifier.verify(_mint(pem, _claims(), kid=f"random-kid-{i}"))
     assert fetches["n"] <= 1
+
+
+def test_concurrent_unknown_kid_flood_is_thread_safe() -> None:
+    # The resolver is a shared singleton driven from asyncio.to_thread worker threads.
+    # A concurrent flood of distinct unknown kids (>1024, so the negative-cache prune
+    # runs) must NOT raise "dict changed size during iteration" (which would surface as
+    # a 500) and must still fetch at most once inside one cooldown window.
+    _, jwk = _ec_keypair(KID)
+    fetch_calls = {"n": 0}
+    counter_lock = threading.Lock()
+
+    def fetch() -> list[Jwk]:
+        with counter_lock:
+            fetch_calls["n"] += 1
+        return [dict(jwk)]
+
+    resolver = JwksKeyResolver(fetch, cooldown_seconds=300.0, clock=lambda: 1000.0)
+    unexpected: list[BaseException] = []
+
+    def hammer(base: int) -> None:
+        for i in range(base, base + 500):
+            try:
+                resolver.get(f"random-kid-{i}")
+            except AuthenticationError:
+                pass  # every unknown kid rejects cleanly; that is expected
+            except BaseException as exc:  # noqa: BLE001 - the test asserts none occur
+                unexpected.append(exc)
+
+    threads = [threading.Thread(target=hammer, args=(b * 500,)) for b in range(8)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert not unexpected, f"concurrent get() raised non-auth errors: {unexpected!r}"
+    assert fetch_calls["n"] <= 1
 
 
 def test_rotated_key_is_picked_up_after_the_cooldown() -> None:
