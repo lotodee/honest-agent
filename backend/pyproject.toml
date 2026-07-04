@@ -59,6 +59,10 @@ docstring-code-format = true
 [tool.mypy]
 plugins = ["pydantic.mypy"]
 mypy_path = "src"
+# Type-check the whole tree, not just src: tests and scripts import app internals and
+# must stay strict-clean too, so an error there fails CI instead of hiding (CI runs
+# the same three paths explicitly).
+files = ["src", "tests", "scripts"]
 explicit_package_bases = true
 strict = true
 warn_redundant_casts = true
