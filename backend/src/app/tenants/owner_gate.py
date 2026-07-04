@@ -1,8 +1,14 @@
 """Owner-door body-size cap: in-app FastAPI middleware on the owner route surface.
 
-Defense-in-depth only. The owner routes read no body today, and it does NOT address
-the JWKS-refetch amplification (that is header-driven and handled in owner_auth's
-resolver). It mirrors the visitor gate's pre-parse content-length check.
+Defense-in-depth only. It rejects on the DECLARED Content-Length header before the
+body is read. Unlike the visitor gate (tenants/gate.py), it does NOT then measure the
+actual bytes received: buffering an unread body here purely to size it would
+reintroduce the very memory-DoS the header check avoids, and owner routes read no
+body today. LIMITATION: a missing or understated Content-Length (e.g. a chunked body)
+is not caught here. A future owner route that PARSES a body must enforce the
+real-bytes cap on what it actually read (as the visitor gate does) and must not rely
+on this middleware alone. This does not address the JWKS-refetch amplification (that
+is header-driven and handled in owner_auth's resolver).
 """
 
 from fastapi import FastAPI, Request, Response
