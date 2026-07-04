@@ -4,7 +4,10 @@ Date: 2026-06-30
 
 ## Status
 
-Accepted
+Accepted (2026-06-30). Superseded by ADR-0006 (per-door request contexts) on
+2026-07-04, which removes the single `get_current_tenant` dependency this ADR named.
+The rest of this decision — one Python service, domain-first layout — still stands;
+only the tenant-scoping seam changed. Body below left as the historical record.
 
 ## Context
 

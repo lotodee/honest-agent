@@ -1,3 +1,5 @@
+> Historical, kept as-is. Predates ADR-0006: this prompt names `get_current_tenant`, which was later removed in favor of per-door request contexts (spec amendment A1 → ADR-0006).
+
 # Day 1 build prompt — the auth spine and the MCP spike
 
 You are Claude Code, the implementer. This file is your instruction set for Day 1 of the `honest-agent` flagship. Read it whole before you write anything. Build exactly what it says, in the order it says, and stop where it tells you to stop.
