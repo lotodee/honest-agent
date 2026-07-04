@@ -13,6 +13,7 @@ any case fails.
 import asyncio
 import os
 import sys
+from typing import NamedTuple
 
 import httpx
 from mcp import ClientSession
@@ -106,7 +107,13 @@ async def _visitor_door() -> None:
         )
 
 
-async def _mcp_call(token: str, origin: str) -> dict[str, object]:
+class _McpOutcome(NamedTuple):
+    tools: list[str]
+    # a CallToolResult; kept as object so the `is not None` check stays valid
+    result: object
+
+
+async def _mcp_call(token: str, origin: str) -> _McpOutcome:
     headers = {"Authorization": f"Bearer {token}", "Origin": origin}
     async with (
         streamablehttp_client(f"{BASE_URL}/mcp", headers=headers) as (
@@ -120,7 +127,7 @@ async def _mcp_call(token: str, origin: str) -> dict[str, object]:
         tools = await session.list_tools()
         tool_names = [tool.name for tool in tools.tools]
         result = await session.call_tool("answer", {"query": "what is MCP?"})
-        return {"tools": tool_names, "result": result}
+        return _McpOutcome(tools=tool_names, result=result)
 
 
 async def _mcp_door() -> None:
@@ -134,8 +141,8 @@ async def _mcp_door() -> None:
     )
     try:
         outcome = await _mcp_call(good_token, "https://claude.ai")
-        listed = "answer" in outcome["tools"]
-        called = outcome["result"] is not None
+        listed = "answer" in outcome.tools
+        called = outcome.result is not None
         _check(listed and called, "valid token + origin: listed and called the tool")
     except Exception as exc:
         _check(False, f"valid token + origin should succeed but raised: {exc!r}")
