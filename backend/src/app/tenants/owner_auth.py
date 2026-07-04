@@ -8,6 +8,7 @@ vector). A rejection resolves no tenant and runs no handler.
 """
 
 import asyncio
+import threading
 import time
 from collections.abc import Callable
 from functools import lru_cache
@@ -57,6 +58,10 @@ class JwksKeyResolver:
     ) -> None:
         self._fetch = fetch
         self._keys: dict[str, PyJWK] = {}
+        # The resolver is a shared singleton driven from asyncio.to_thread worker
+        # threads, so the miss path (which mutates _unknown_kids/_last_refresh and may
+        # fetch) must be serialized. A threading.Lock, not asyncio: it runs in threads.
+        self._lock = threading.Lock()
         self._cooldown = cooldown_seconds
         # monotonic clock: a wall-clock adjustment must not widen or collapse the
         # cooldown window. -inf so the first miss always refreshes.
@@ -65,20 +70,32 @@ class JwksKeyResolver:
         self._unknown_kids: dict[str, float] = {}
 
     def get(self, kid: str) -> PyJWK:
+        # Fast path stays lock-free: a single dict read. _refresh only ever REBINDS
+        # _keys wholesale (never mutates it in place), so a concurrent refresh is a
+        # clean reference swap, not a torn read.
         key = self._keys.get(kid)
         if key is not None:
             return key
-        now = self._clock()
-        seen_at = self._unknown_kids.get(kid)
-        if seen_at is not None and now - seen_at < self._cooldown:
+        # Miss path: serialize it. It mutates shared state and may fetch, and runs in
+        # worker threads; unguarded, a concurrent prune could raise "dict changed size
+        # during iteration" (a 500) and two threads could double-fetch at the boundary.
+        with self._lock:
+            # Re-check under the lock: another thread may have refreshed _keys while we
+            # waited, so a just-rotated kid can now be present.
+            key = self._keys.get(kid)
+            if key is not None:
+                return key
+            now = self._clock()
+            seen_at = self._unknown_kids.get(kid)
+            if seen_at is not None and now - seen_at < self._cooldown:
+                raise AuthenticationError("unknown token signing key")
+            if now - self._last_refresh >= self._cooldown:
+                self._refresh(now)
+                rotated = self._keys.get(kid)
+                if rotated is not None:
+                    return rotated
+            self._remember_unknown(kid, now)
             raise AuthenticationError("unknown token signing key")
-        if now - self._last_refresh >= self._cooldown:
-            self._refresh(now)
-            rotated = self._keys.get(kid)
-            if rotated is not None:
-                return rotated
-        self._remember_unknown(kid, now)
-        raise AuthenticationError("unknown token signing key")
 
     def _refresh(self, now: float) -> None:
         # Record the attempt BEFORE fetching, so a failing/hanging JWKS endpoint is
