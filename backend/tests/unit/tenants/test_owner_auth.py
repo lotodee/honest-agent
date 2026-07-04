@@ -199,23 +199,54 @@ def test_malformed_token_rejected() -> None:
         _verifier([jwk]).verify("not-a-jwt")
 
 
-def test_resolver_refetches_once_on_key_rotation() -> None:
-    pem1, jwk1 = _ec_keypair("key-1")
-    pem2, jwk2 = _ec_keypair("key-2")
-    published: list[list[Jwk]] = [[jwk1], [jwk1, jwk2]]
-    calls = {"n": 0}
+def test_unknown_kid_flood_triggers_at_most_one_jwks_fetch() -> None:
+    # The HIGH: an anonymous flood of tokens carrying random unknown kids (read from
+    # the unverified header) must NOT amplify into one outbound JWKS fetch per request.
+    pem, jwk = _ec_keypair(KID)
+    fetches = {"n": 0}
 
     def fetch() -> list[Jwk]:
-        current = published[min(calls["n"], len(published) - 1)]
-        calls["n"] += 1
-        return [dict(k) for k in current]
+        fetches["n"] += 1
+        return [dict(jwk)]
 
-    verifier = OwnerTokenVerifier(
-        resolver=JwksKeyResolver(fetch), issuer=ISSUER, audience=AUDIENCE
-    )
+    # A fixed clock keeps every request inside one cooldown window.
+    resolver = JwksKeyResolver(fetch, cooldown_seconds=300.0, clock=lambda: 1000.0)
+    verifier = OwnerTokenVerifier(resolver=resolver, issuer=ISSUER, audience=AUDIENCE)
+
+    for i in range(100):
+        with pytest.raises(AuthenticationError):
+            verifier.verify(_mint(pem, _claims(), kid=f"random-kid-{i}"))
+    assert fetches["n"] <= 1
+
+
+def test_rotated_key_is_picked_up_after_the_cooldown() -> None:
+    pem1, jwk1 = _ec_keypair("key-1")
+    pem2, jwk2 = _ec_keypair("key-2")
+    published: list[Jwk] = [jwk1]
+    fetches = {"n": 0}
+
+    def fetch() -> list[Jwk]:
+        fetches["n"] += 1
+        return [dict(k) for k in published]
+
+    clock = {"t": 1000.0}
+    resolver = JwksKeyResolver(fetch, cooldown_seconds=300.0, clock=lambda: clock["t"])
+    verifier = OwnerTokenVerifier(resolver=resolver, issuer=ISSUER, audience=AUDIENCE)
+
     assert verifier.verify(_mint(pem1, _claims(), kid="key-1")).tenant_id == "tenant-a"
-    # key-2 was rotated in after the first fetch; a cache miss refetches once.
+    assert fetches["n"] == 1
+
+    # key-2 is rotated in, but WITHIN the cooldown the resolver must not refetch.
+    published.append(jwk2)
+    clock["t"] += 100.0
+    with pytest.raises(AuthenticationError):
+        verifier.verify(_mint(pem2, _claims(), kid="key-2"))
+    assert fetches["n"] == 1  # still throttled: no extra outbound fetch
+
+    # After the cooldown elapses, the first miss refetches and picks up the rotation.
+    clock["t"] += 300.0
     assert verifier.verify(_mint(pem2, _claims(), kid="key-2")).tenant_id == "tenant-a"
+    assert fetches["n"] == 2
 
 
 def _request(headers: dict[str, str]) -> Request:
