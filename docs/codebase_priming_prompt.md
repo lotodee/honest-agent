@@ -1,3 +1,5 @@
+> Historical, kept as-is. Predates ADR-0006: this prompt names `get_current_tenant`, which was later removed in favor of per-door request contexts (spec amendment A1 → ADR-0006).
+
 # Codebase Priming Prompt (paste into Claude Code)
 
 You are setting up an empty repository for a multi-tenant embeddable AI support assistant (Python/FastAPI + PydanticAI backend, React+Vite dashboard, Lit+Vite widget). This task is PRIMING ONLY: the full toolchain, config, structure, and empty wiring. Do NOT build any product features. Every package and module you create is an empty, importable, wired stub. By the end the quick-gate must actually pass and CI must be green on this empty scaffold.

@@ -4,7 +4,14 @@ Intentional, recorded deviations from the Milestone-0 scaffold and the original
 plan. A later day must NOT silently undo these. Each entry says what changed, why,
 and what replaces it.
 
+> **New architecture decisions go in `docs/adr/`, not here.** This file remains as
+> the record of amendments already made; entries are promoted to ADRs as they settle
+> (A1 → ADR-0006).
+
 ## A1 — `get_current_tenant` removed; tenant scoping is per-door (Day 1)
+
+**Status: promoted to [ADR-0006](adr/0006-per-door-request-contexts.md).** Kept here
+for history; the decision now lives as an ADR (which also supersedes ADR-0004).
 
 **What changed.** Milestone 0 shipped a single shared dependency
 `core/deps.py:get_current_tenant` as "the one place tenant scoping lives." Day 1
