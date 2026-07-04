@@ -55,6 +55,14 @@ class NotFoundError(AppError):
     problem_type = f"{_PROBLEM_BASE}/not-found"
 
 
+class ServiceUnavailableError(AppError):
+    # An upstream dependency (e.g. the Supabase JWKS endpoint) is down or hanging.
+    # 503 signals "retryable, not your fault" — never conflate it with a 401.
+    status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    title = "Service Unavailable"
+    problem_type = f"{_PROBLEM_BASE}/service-unavailable"
+
+
 class IngestionError(AppError):
     status_code = status.HTTP_422_UNPROCESSABLE_CONTENT
     title = "Ingestion Failed"

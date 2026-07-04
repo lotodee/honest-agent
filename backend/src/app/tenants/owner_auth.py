@@ -18,7 +18,7 @@ from fastapi import Request
 from jwt import PyJWK
 
 from app.core.bearer import parse_bearer
-from app.core.errors import AuthenticationError
+from app.core.errors import AuthenticationError, ServiceUnavailableError
 from app.core.settings import Settings, get_settings
 from app.tenants.contexts import OwnerRequestContext
 
@@ -84,11 +84,22 @@ class JwksKeyResolver:
         # Record the attempt BEFORE fetching, so a failing/hanging JWKS endpoint is
         # throttled too and cannot itself become the amplification vector.
         self._last_refresh = now
-        keys: dict[str, PyJWK] = {}
-        for entry in self._fetch():
-            kid = entry.get("kid")
-            if isinstance(kid, str) and kid:
-                keys[kid] = PyJWK.from_dict(entry)
+        try:
+            keys: dict[str, PyJWK] = {}
+            for entry in self._fetch():
+                kid = entry.get("kid")
+                if isinstance(kid, str) and kid:
+                    keys[kid] = PyJWK.from_dict(entry)
+        except Exception as exc:
+            # A JWKS endpoint that is down, hanging, returning an error, or serving a
+            # malformed key is an UPSTREAM failure, not a bad token. Convert it to a
+            # clean, retryable 503 (rendered by the RFC 9457 handler) instead of
+            # letting a raw httpx/jwt exception fall through to a generic 500. This
+            # still fails closed — no token is accepted — and the refetch is already
+            # throttled to once per cooldown by the _last_refresh stamp above.
+            raise ServiceUnavailableError(
+                "token signing keys are temporarily unavailable"
+            ) from exc
         self._keys = keys
         # Fresh JWKS may contain a kid we just rejected; drop stale negatives so a
         # rotated key is never shadowed by an earlier miss.
