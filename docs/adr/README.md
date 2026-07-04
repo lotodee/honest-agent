@@ -31,6 +31,7 @@ superseded, follow the successor ADR for the part that changed.
 ## Where decisions live
 
 - **Settled architecture decisions:** an ADR here.
+- **Known limitations & deferred hardening:** `docs/FOLLOWUPS.md`, not only in docstrings.
 - **Transitional amendments:** `docs/spec-amendments.md`, until promoted to an ADR.
 - **When an amendment is promoted to an ADR:** update any rules-file citation
   (`CLAUDE.md` / `AGENTS.md`) to point at the ADR, not the amendment.
