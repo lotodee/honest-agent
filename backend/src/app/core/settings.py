@@ -1,16 +1,21 @@
 """The one typed configuration object. Import `get_settings`; never read os.environ."""
 
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# The backend reads ONE unambiguous env file: backend/.env (server-only secrets),
+# anchored to the backend directory so the cwd cannot change which file is read and
+# the repo-root .env is never loaded. No frontend build can ever share this file.
+_BACKEND_ENV = Path(__file__).resolve().parents[3] / ".env"
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        # The .env lives at the repo root while the backend runs from backend/, so
-        # look in both: "../.env" resolves it when run from backend/, ".env" when
-        # run from the repo root. The real environment always wins over either.
-        env_file=(".env", "../.env"),
+        # backend/.env only. The real environment (host env / deploy secrets) still
+        # wins over the file, so production does not rely on a committed file.
+        env_file=_BACKEND_ENV,
         env_file_encoding="utf-8",
         extra="ignore",
         frozen=True,
@@ -39,13 +44,20 @@ class Settings(BaseSettings):
     # same reason as the database.
     weaviate_url: str
 
-    # Gemini via Vertex AI is the only live model. The service-account JSON is the
-    # one credential that can spend money, so it stays server-side and is None
-    # until provisioned. generation_model is the ONE place a model name lives
-    # (generation and vision description both read it, per architecture Delta 4);
-    # never hardcode a model string anywhere else.
-    vertex_credentials_path: str | None = None
+    # Gemini via Vertex AI is the only live model. generation_model is the ONE place
+    # a model name lives (generation and vision description both read it, per
+    # architecture Delta 4); never hardcode a model string anywhere else.
     generation_model: str = "google-cloud:gemini-3-flash"
+
+    # The Vertex service-account credential. google_credentials_b64 is the deploy
+    # path: the SA JSON delivered as base64 in the env, because a free-tier container
+    # cannot mount a key file. It is decoded server-side at call time (Day 5), is a
+    # crown jewel, and never reaches a browser. gcp_project and gcp_location configure
+    # the Vertex client. vertex_credentials_path is the alternative local file path.
+    google_credentials_b64: str | None = None
+    gcp_project: str | None = None
+    gcp_location: str = "us-central1"
+    vertex_credentials_path: str | None = None
 
     # Supabase keys. service_role bypasses RLS, so leaking it defeats tenant
     # isolation; it lives only in host env and CI secrets.
@@ -94,14 +106,14 @@ class Settings(BaseSettings):
 # bundle, a log line, or an error body. The public widget key and anon key are
 # deliberately NOT here: they are public identifiers.
 #
-# vertex_credentials_path is the path to the Vertex service-account JSON (the crown
-# jewel). The JSON CONTENT is never loaded into Settings, only read server-side at
-# call time, so the path is the only Vertex value Settings holds; it is guarded too
-# so the location of the crown jewel cannot leak to a browser or a log.
+# google_credentials_b64 IS the Vertex service-account JSON (base64), a crown jewel,
+# so it is guarded. vertex_credentials_path is the path to the same JSON; the path is
+# guarded too so the location of the crown jewel cannot leak to a browser or a log.
 SECRET_SETTINGS_FIELDS = frozenset(
     {
         "supabase_service_role_key",
         "mcp_signing_secret",
+        "google_credentials_b64",
         "vertex_credentials_path",
     }
 )
