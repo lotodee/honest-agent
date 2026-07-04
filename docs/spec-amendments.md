@@ -6,7 +6,9 @@ and what replaces it.
 
 > **New architecture decisions go in `docs/adr/`, not here.** This file remains as
 > the record of amendments already made; entries are promoted to ADRs as they settle
-> (A1 → ADR-0006).
+> (A1 → ADR-0006). Promoting an amendment to an ADR includes repointing any
+> rules-file citation (`CLAUDE.md` / `AGENTS.md`) at the ADR, so ground-truth docs
+> never cite a superseded amendment. (See `docs/adr/README.md` for the ADR house rule.)
 
 ## A1 — `get_current_tenant` removed; tenant scoping is per-door (Day 1)
 
