@@ -24,6 +24,7 @@ from app.core.errors import (
     app_error_response,
 )
 from app.core.origins import host_allowed
+from app.core.paths import path_under_prefix
 from app.tenants.contexts import VisitorRequestContext
 from app.tenants.rate_limit import RateLimiter
 from app.tenants.widget_keys import WidgetKeyStore
@@ -99,7 +100,7 @@ def install_visitor_gate(app: FastAPI, provide_gate: Callable[[], VisitorGate]) 
     async def visitor_gate_middleware(
         request: Request, call_next: RequestResponseEndpoint
     ) -> Response:
-        if not request.url.path.startswith(WIDGET_PATH_PREFIX):
+        if not path_under_prefix(request.url.path, WIDGET_PATH_PREFIX):
             return await call_next(request)
         gate = provide_gate()
         instance = request.url.path

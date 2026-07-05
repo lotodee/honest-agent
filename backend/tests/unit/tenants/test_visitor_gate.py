@@ -237,7 +237,22 @@ def _gate_app() -> FastAPI:
     async def _answer() -> dict[str, str]:
         return {"door": "visitor"}
 
+    @app.post("/v1/widgetx/ping")
+    async def _sibling() -> dict[str, str]:
+        return {"door": "sibling"}
+
     return app
+
+
+async def test_sibling_prefix_route_bypasses_the_visitor_gate() -> None:
+    # /v1/widgetx shares the string but is NOT a segment under /v1/widget: a bare
+    # startswith would wrongly subject it to the visitor auth chain (401 with no key).
+    # Boundary matching lets it through ungated.
+    transport = ASGITransport(app=_gate_app())
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post("/v1/widgetx/ping")
+    assert response.status_code == 200
+    assert response.json() == {"door": "sibling"}
 
 
 async def test_overlong_content_length_is_clean_400_not_500() -> None:

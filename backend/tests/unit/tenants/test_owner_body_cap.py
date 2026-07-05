@@ -22,6 +22,10 @@ def _app() -> FastAPI:
     async def ingestion_echo() -> dict[str, str]:
         return {"door": "ingestion"}
 
+    @app.post("/v1/tenants2/echo")
+    async def sibling_echo() -> dict[str, str]:
+        return {"door": "sibling"}
+
     return app
 
 
@@ -49,6 +53,15 @@ async def test_ingestion_path_is_not_capped() -> None:
         response = await client.post("/v1/ingestion/echo", content=b"x" * (_CAP + 500))
     assert response.status_code == 200
     assert response.json() == {"door": "ingestion"}
+
+
+async def test_sibling_prefix_route_is_not_capped() -> None:
+    # /v1/tenants2 shares the string but is NOT a segment under /v1/tenants: a bare
+    # startswith would wrongly cap it. Boundary matching lets its body through.
+    async with await _client(_app()) as client:
+        response = await client.post("/v1/tenants2/echo", content=b"x" * (_CAP + 500))
+    assert response.status_code == 200
+    assert response.json() == {"door": "sibling"}
 
 
 async def test_overlong_content_length_is_clean_400_not_500() -> None:
