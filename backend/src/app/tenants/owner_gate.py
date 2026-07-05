@@ -9,6 +9,12 @@ is not caught here. A future owner route that PARSES a body must enforce the
 real-bytes cap on what it actually read (as the visitor gate does) and must not rely
 on this middleware alone. This does not address the JWKS-refetch amplification (that
 is header-driven and handled in owner_auth's resolver).
+
+The guarded `path_prefix` is PASSED IN by the app factory (create_app), derived from
+the tenants router's own mounted path, so a router-prefix rename moves this cap with it
+instead of silently unguarding the renamed routes. The ingestion upload path
+(/v1/ingestion, Days 3-4) carries large PDFs and is naturally excluded — it is under a
+different router prefix.
 """
 
 from fastapi import FastAPI, Request, Response
@@ -16,17 +22,13 @@ from starlette.middleware.base import RequestResponseEndpoint
 
 from app.core.content_length import enforce_content_length_cap
 
-# The owner-door route surface today. Scoped deliberately: the ingestion upload path
-# (/v1/ingestion, Days 3-4) carries large PDFs and must NOT inherit this small cap.
-OWNER_PATH_PREFIX = "/v1/tenants"
 
-
-def install_owner_body_cap(app: FastAPI, max_body_bytes: int) -> None:
+def install_owner_body_cap(app: FastAPI, path_prefix: str, max_body_bytes: int) -> None:
     @app.middleware("http")
     async def owner_body_cap_middleware(
         request: Request, call_next: RequestResponseEndpoint
     ) -> Response:
-        if request.url.path.startswith(OWNER_PATH_PREFIX):
+        if request.url.path.startswith(path_prefix):
             rejection = enforce_content_length_cap(
                 request, max_body_bytes, "declared body exceeds the owner limit"
             )
