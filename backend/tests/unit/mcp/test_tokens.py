@@ -145,7 +145,7 @@ def test_mcp_token_is_rejected_by_the_owner_verifier() -> None:
     # (no kid, wrong algorithm family, wrong issuer/audience).
     _, jwk = _owner_jwk()
     owner_verifier = OwnerTokenVerifier(
-        resolver=JwksKeyResolver(lambda: [dict(jwk)]),
+        resolver=JwksKeyResolver(lambda: [dict(jwk)], cooldown_seconds=300.0),
         issuer="http://127.0.0.1:54321/auth/v1",
         audience="authenticated",
     )

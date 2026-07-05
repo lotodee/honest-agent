@@ -33,7 +33,7 @@ async def test_owner_tenant_comes_only_from_app_metadata() -> None:
     )
     jwk.update({"kid": "k", "alg": "ES256", "use": "sig"})
     verifier = OwnerTokenVerifier(
-        resolver=JwksKeyResolver(lambda: [dict(jwk)]),
+        resolver=JwksKeyResolver(lambda: [dict(jwk)], cooldown_seconds=300.0),
         issuer="iss",
         audience="aud",
     )
