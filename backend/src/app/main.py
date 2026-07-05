@@ -44,6 +44,10 @@ _DOMAIN_ROUTERS: tuple[APIRouter, ...] = (
     widget_router,
 )
 
+# The single API version prefix. Used both to mount the routers and to derive the owner
+# body-cap's guarded prefix, so the two cannot drift.
+_API_PREFIX = "/v1"
+
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -74,10 +78,14 @@ def create_app() -> FastAPI:
     configure_observability(app, settings)
     register_error_handlers(app)
     install_visitor_gate(app, lambda: _visitor_gate(app, settings))
-    # Owner routes share the visitor door's body-size cap (defense-in-depth).
-    install_owner_body_cap(app, settings.visitor_max_body_bytes)
+    # Owner routes share the visitor door's body-size cap (defense-in-depth). Derive the
+    # guarded prefix from the tenants router's real mounted path so a prefix rename
+    # cannot silently unguard it.
+    install_owner_body_cap(
+        app, f"{_API_PREFIX}{tenants_router.prefix}", settings.visitor_max_body_bytes
+    )
     for router in _DOMAIN_ROUTERS:
-        app.include_router(router, prefix="/v1")
+        app.include_router(router, prefix=_API_PREFIX)
     app.mount(
         "/mcp",
         McpSecurityMiddleware(

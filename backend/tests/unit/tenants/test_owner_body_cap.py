@@ -12,7 +12,7 @@ _CAP = 100
 
 def _app() -> FastAPI:
     app = FastAPI()
-    install_owner_body_cap(app, max_body_bytes=_CAP)
+    install_owner_body_cap(app, "/v1/tenants", max_body_bytes=_CAP)
 
     @app.post("/v1/tenants/echo")
     async def tenants_echo() -> dict[str, str]:
