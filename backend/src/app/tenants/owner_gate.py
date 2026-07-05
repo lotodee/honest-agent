@@ -21,6 +21,7 @@ from fastapi import FastAPI, Request, Response
 from starlette.middleware.base import RequestResponseEndpoint
 
 from app.core.content_length import enforce_content_length_cap
+from app.core.paths import path_under_prefix
 
 
 def install_owner_body_cap(app: FastAPI, path_prefix: str, max_body_bytes: int) -> None:
@@ -28,7 +29,7 @@ def install_owner_body_cap(app: FastAPI, path_prefix: str, max_body_bytes: int) 
     async def owner_body_cap_middleware(
         request: Request, call_next: RequestResponseEndpoint
     ) -> Response:
-        if request.url.path.startswith(path_prefix):
+        if path_under_prefix(request.url.path, path_prefix):
             rejection = enforce_content_length_cap(
                 request, max_body_bytes, "declared body exceeds the owner limit"
             )
