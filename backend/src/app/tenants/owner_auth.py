@@ -15,6 +15,7 @@ from functools import lru_cache
 
 import httpx
 import jwt
+import structlog
 from fastapi import Request
 from jwt import PyJWK
 
@@ -23,14 +24,23 @@ from app.core.errors import AuthenticationError, ServiceUnavailableError
 from app.core.settings import Settings, get_settings
 from app.tenants.contexts import OwnerRequestContext
 
+log = structlog.get_logger(__name__)
+
 JwksFetcher = Callable[[], list[dict[str, object]]]
 
 _ALGORITHMS = ("ES256",)
 _CLOCK_SKEW_LEEWAY_SECONDS = 10
 _JWKS_FETCH_TIMEOUT_SECONDS = 5.0
+# Default cooldown for a DIRECTLY-constructed resolver only (i.e. tests). Production
+# always passes settings.owner_jwks_refresh_cooldown_seconds (same 300.0 default,
+# reasoned there); this constant is not the production source, so the two can drift if
+# one is changed alone — harmless, since only the settings value is ever wired.
 _JWKS_REFRESH_COOLDOWN_SECONDS = 300.0
 # Cap the negative cache so a flood of distinct random kids cannot grow it without
 # bound; the cooldown throttle already bounds outbound fetches, this just bounds memory.
+# 1024 is an arbitrary bounded ceiling, not a tuned value: neither correctness nor the
+# (independent) fetch throttle depends on it — a full cache just prunes then clears — it
+# only caps worst-case memory at a few thousand short kid strings.
 _NEGATIVE_CACHE_MAX_ENTRIES = 1024
 
 
@@ -114,6 +124,18 @@ class JwksKeyResolver:
             # letting a raw httpx/jwt exception fall through to a generic 500. This
             # still fails closed — no token is accepted — and the refetch is already
             # throttled to once per cooldown by the _last_refresh stamp above.
+            #
+            # Log the cause here: the 503 the handler renders is a normal response with
+            # no exception for instrument_fastapi to capture, so without this line the
+            # root cause lands nowhere and a real outage is indistinguishable from a
+            # JWKS-parsing bug we shipped. No secret is logged (the JWKS URL and the
+            # httpx/jwt error carry none); exc_info keeps the traceback for triage.
+            log.warning(
+                "owner_jwks_refresh_failed",
+                error_type=type(exc).__name__,
+                error=str(exc),
+                exc_info=exc,
+            )
             raise ServiceUnavailableError(
                 "token signing keys are temporarily unavailable"
             ) from exc

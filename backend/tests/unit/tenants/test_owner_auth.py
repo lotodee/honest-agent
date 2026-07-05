@@ -14,6 +14,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from jwt.algorithms import ECAlgorithm
 from starlette.requests import Request
+from structlog.testing import capture_logs
 
 from app.core.errors import AuthenticationError, ServiceUnavailableError
 from app.tenants.owner_auth import (
@@ -356,3 +357,20 @@ def test_failing_jwks_endpoint_raises_clean_503_and_is_still_throttled() -> None
     with pytest.raises(AuthenticationError):
         resolver.get("key-2")  # throttled: clean reject, no second fetch
     assert fetches["n"] == 1
+
+
+def test_jwks_fetch_failure_logs_the_cause() -> None:
+    # The 503 the handler renders is a normal response with no exception for
+    # instrument_fastapi to capture, so the resolver must log the upstream cause itself
+    # — otherwise a real outage and a JWKS-parsing bug look identical in the logs.
+    def failing_fetch() -> list[Jwk]:
+        raise httpx.ConnectError("jwks endpoint refused the connection")
+
+    resolver = JwksKeyResolver(failing_fetch, cooldown_seconds=300.0, clock=lambda: 1.0)
+    with capture_logs() as logs, pytest.raises(ServiceUnavailableError):
+        resolver.get("key-1")
+
+    warnings = [e for e in logs if e.get("event") == "owner_jwks_refresh_failed"]
+    assert warnings, "the JWKS upstream failure was not logged"
+    assert warnings[0]["error_type"] == "ConnectError"
+    assert "refused the connection" in warnings[0]["error"]
