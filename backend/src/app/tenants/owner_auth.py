@@ -31,11 +31,6 @@ JwksFetcher = Callable[[], list[dict[str, object]]]
 _ALGORITHMS = ("ES256",)
 _CLOCK_SKEW_LEEWAY_SECONDS = 10
 _JWKS_FETCH_TIMEOUT_SECONDS = 5.0
-# Default cooldown for a DIRECTLY-constructed resolver only (i.e. tests). Production
-# always passes settings.owner_jwks_refresh_cooldown_seconds (same 300.0 default,
-# reasoned there); this constant is not the production source, so the two can drift if
-# one is changed alone — harmless, since only the settings value is ever wired.
-_JWKS_REFRESH_COOLDOWN_SECONDS = 300.0
 # Cap the negative cache so a flood of distinct random kids cannot grow it without
 # bound; the cooldown throttle already bounds outbound fetches, this just bounds memory.
 # 1024 is an arbitrary bounded ceiling, not a tuned value: neither correctness nor the
@@ -63,7 +58,11 @@ class JwksKeyResolver:
         self,
         fetch: JwksFetcher,
         *,
-        cooldown_seconds: float = _JWKS_REFRESH_COOLDOWN_SECONDS,
+        # No default: the sole 300.0 default lives in Settings
+        # (owner_jwks_refresh_cooldown_seconds, reasoned there). Production wires that
+        # value; tests pass an explicit one. Keeping the literal in exactly one place is
+        # the same single-sourcing this PR applied to the owner-cap path prefix.
+        cooldown_seconds: float,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self._fetch = fetch

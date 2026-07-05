@@ -55,7 +55,9 @@ def _ec_keypair(kid: str) -> tuple[str, Jwk]:
 
 def _verifier(keys: list[Jwk]) -> OwnerTokenVerifier:
     return OwnerTokenVerifier(
-        resolver=JwksKeyResolver(lambda: [dict(k) for k in keys]),
+        resolver=JwksKeyResolver(
+            lambda: [dict(k) for k in keys], cooldown_seconds=300.0
+        ),
         issuer=ISSUER,
         audience=AUDIENCE,
     )
@@ -334,7 +336,7 @@ def test_resolver_fails_closed_when_jwks_fetch_errors() -> None:
         raise TimeoutError("jwks endpoint timed out")
 
     with pytest.raises(ServiceUnavailableError):
-        JwksKeyResolver(failing_fetch).get("key-1")
+        JwksKeyResolver(failing_fetch, cooldown_seconds=300.0).get("key-1")
 
 
 def test_failing_jwks_endpoint_raises_clean_503_and_is_still_throttled() -> None:
