@@ -33,8 +33,9 @@ docs/           architecture.md, adr/, and the planning source-of-truth docs
 
 The backend is domain-first: `tenants`, `ingestion`, `agent`, `retrieval`,
 `guardrails`, `eval`, `mcp`, each owning its own router and schemas, plus `core/`
-for settings, logging, observability, the db seam, the error contract, and the
-single `get_current_tenant` scoping dependency.
+for settings, logging, observability, the db seam, and the error contract. Tenant
+scoping is resolved per door: owner JWT, visitor widget key, and MCP token each
+produce their own typed context.
 
 ## Run it locally
 
