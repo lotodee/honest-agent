@@ -3,6 +3,7 @@
 from functools import lru_cache
 from pathlib import Path
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # The backend reads ONE unambiguous env file: backend/.env (server-only secrets),
@@ -87,8 +88,10 @@ class Settings(BaseSettings):
     # request against Supabase's JWKS endpoint. 300s is a conservative default: it
     # trades at most ~5 min of extra latency before a rotated key is picked up against
     # the amplification bound. Supabase publishes no fixed key-rotation SLA, so this is
-    # deliberately generous and is env-overridable if that changes.
-    owner_jwks_refresh_cooldown_seconds: float = 300.0
+    # deliberately generous and is env-overridable if that changes. The 60s minimum
+    # keeps a misconfigured tiny positive value from effectively disabling the
+    # anti-amplification control.
+    owner_jwks_refresh_cooldown_seconds: float = Field(default=300.0, ge=60.0)
 
     # MCP door: the self-minted external-caller token. The signing secret is a
     # crown jewel (server-side only) and is required. The issuer and audience are
