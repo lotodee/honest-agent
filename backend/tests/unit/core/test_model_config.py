@@ -9,6 +9,7 @@ import pathlib
 import re
 
 import pytest
+from pydantic import ValidationError
 
 from app.core.settings import EMBEDDING_DIM, Settings
 
@@ -42,6 +43,23 @@ def test_model_names_and_location_are_env_overridable(
     assert settings.generation_model == "google-cloud:gemini-2.5-flash"
     assert settings.embedding_model == "text-embedding-005"
     assert settings.gcp_location == "us-central1"
+
+
+@pytest.mark.parametrize("cooldown", [0.0, -1.0, 0.001, 59.999])
+def test_jwks_cooldown_has_a_meaningful_lower_bound(cooldown: float) -> None:
+    with pytest.raises(ValidationError):
+        Settings(
+            _env_file=None,
+            owner_jwks_refresh_cooldown_seconds=cooldown,
+        )
+
+
+def test_jwks_cooldown_accepts_the_minimum_bound() -> None:
+    settings = Settings(
+        _env_file=None,
+        owner_jwks_refresh_cooldown_seconds=60.0,
+    )
+    assert settings.owner_jwks_refresh_cooldown_seconds == 60.0
 
 
 def test_embedding_dim_is_a_constant_not_env_overridable(

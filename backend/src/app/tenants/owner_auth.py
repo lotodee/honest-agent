@@ -8,6 +8,7 @@ vector). A rejection resolves no tenant and runs no handler.
 """
 
 import asyncio
+import hashlib
 import threading
 import time
 from collections.abc import Callable
@@ -33,9 +34,10 @@ _CLOCK_SKEW_LEEWAY_SECONDS = 10
 _JWKS_FETCH_TIMEOUT_SECONDS = 5.0
 # Cap the negative cache so a flood of distinct random kids cannot grow it without
 # bound; the cooldown throttle already bounds outbound fetches, this just bounds memory.
-# 1024 is an arbitrary bounded ceiling, not a tuned value: neither correctness nor the
-# (independent) fetch throttle depends on it — a full cache just prunes then clears — it
-# only caps worst-case memory at a few thousand short kid strings.
+# Unknown kids are stored by SHA-256 digest, not raw attacker-controlled header text,
+# so retained memory is fixed-size without imposing an arbitrary provider kid limit.
+# Neither correctness nor the independent fetch throttle depends on the entry count; a
+# full cache prunes then clears.
 _NEGATIVE_CACHE_MAX_ENTRIES = 1024
 
 
@@ -95,7 +97,8 @@ class JwksKeyResolver:
             if key is not None:
                 return key
             now = self._clock()
-            seen_at = self._unknown_kids.get(kid)
+            cache_key = self._unknown_cache_key(kid)
+            seen_at = self._unknown_kids.get(cache_key)
             if seen_at is not None and now - seen_at < self._cooldown:
                 raise AuthenticationError("unknown token signing key")
             if now - self._last_refresh >= self._cooldown:
@@ -103,7 +106,7 @@ class JwksKeyResolver:
                 rotated = self._keys.get(kid)
                 if rotated is not None:
                     return rotated
-            self._remember_unknown(kid, now)
+            self._remember_unknown(cache_key, now)
             raise AuthenticationError("unknown token signing key")
 
     def _refresh(self, now: float) -> None:
@@ -143,7 +146,10 @@ class JwksKeyResolver:
         # rotated key is never shadowed by an earlier miss.
         self._unknown_kids.clear()
 
-    def _remember_unknown(self, kid: str, now: float) -> None:
+    def _unknown_cache_key(self, kid: str) -> str:
+        return hashlib.sha256(kid.encode("utf-8")).hexdigest()
+
+    def _remember_unknown(self, cache_key: str, now: float) -> None:
         if len(self._unknown_kids) >= _NEGATIVE_CACHE_MAX_ENTRIES:
             cutoff = now - self._cooldown
             self._unknown_kids = {
@@ -151,7 +157,7 @@ class JwksKeyResolver:
             }
             if len(self._unknown_kids) >= _NEGATIVE_CACHE_MAX_ENTRIES:
                 self._unknown_kids.clear()
-        self._unknown_kids[kid] = now
+        self._unknown_kids[cache_key] = now
 
 
 class OwnerTokenVerifier:

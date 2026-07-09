@@ -174,6 +174,23 @@ def test_unknown_kid_rejected_without_trying_every_key() -> None:
         _verifier([jwk]).verify(_mint(pem, _claims(), kid="some-other-kid"))
 
 
+def test_unknown_kid_cache_stores_digest_not_raw_attacker_text() -> None:
+    fetches = {"n": 0}
+
+    def fetch() -> list[Jwk]:
+        fetches["n"] += 1
+        return []
+
+    resolver = JwksKeyResolver(fetch, cooldown_seconds=300.0)
+    long_kid = "k" * 4096
+    with pytest.raises(AuthenticationError):
+        resolver.get(long_kid)
+    assert fetches["n"] == 1
+    assert long_kid not in resolver._unknown_kids
+    digest = hashlib.sha256(long_kid.encode("utf-8")).hexdigest()
+    assert digest in resolver._unknown_kids
+
+
 def test_tenant_only_in_user_metadata_is_rejected() -> None:
     pem, jwk = _ec_keypair(KID)
     claims = _claims(app_metadata={}, user_metadata={"tenant_id": "tenant-a"})

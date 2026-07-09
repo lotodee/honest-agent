@@ -5,7 +5,7 @@ A living, terse index of `backend/src/app` (plus scripts, migrations, tests). On
 ## core/ — settings, db, errors, shared plumbing
 - **core/settings.py** — the one typed config object; import `get_settings`, never `os.environ`; reads only `backend/.env` (per-component, ADR: no repo-root env).
   - `EMBEDDING_DIM = 768` — module-level FIXED constant (not a Settings field, not env-overridable); coupled 1:1 to the `chunks.embedding vector(N)` column and schema-match tested (ADR-0007).
-  - `Settings` — all env-driven config: owner + app_user DB URLs, Weaviate, JWT/JWKS, MCP token + allowed origins/hosts, `generation_model`/`embedding_model`/`gcp_location`/`gcp_project` (Vertex, ADR-0007, env-overridable), `owner_jwks_refresh_cooldown_seconds`, visitor body cap, secrets.
+  - `Settings` — all env-driven config: owner + app_user DB URLs, Weaviate, JWT/JWKS, MCP token + allowed origins/hosts, `generation_model`/`embedding_model`/`gcp_location`/`gcp_project` (Vertex, ADR-0007, env-overridable), `owner_jwks_refresh_cooldown_seconds` with a 60s minimum, visitor body cap, secrets.
   - `SECRET_SETTINGS_FIELDS`, `secret_values(settings)` — the secret registry + currently-configured secret strings (non-leak guard).
   - `get_settings()` — cached `Settings` singleton.
 - **core/db.py** — the unprivileged asyncpg pool and the single tenant-scoped path.
@@ -28,7 +28,8 @@ A living, terse index of `backend/src/app` (plus scripts, migrations, tests). On
 ## tenants/ — the three doors' tenant resolution + widget store
 - **tenants/contexts.py** — the three per-door request contexts (never collapsed): `OwnerRequestContext`, `VisitorRequestContext`, `ExternalCallerContext`.
 - **tenants/owner_auth.py** — owner Supabase JWT verification (door A).
-  - `JwksKeyResolver` — JWKS by kid, cached; refetch on miss is COOLDOWN-THROTTLED (default 300s, `owner_jwks_refresh_cooldown_seconds`) with a bounded negative cache of recently-seen unknown kids, so a random-kid flood cannot amplify into one fetch per request; a `threading.Lock` serializes the miss path (thread-safe under the `asyncio.to_thread` worker-thread model — see `get_owner_context`); a fetch failure converts to `ServiceUnavailableError` (503), never a raw exception. Throttle is per-process (FOLLOWUPS.md #3). `OwnerTokenVerifier` — ES256, iss/aud/exp, tenant from `app_metadata` only.
+  - `JwksFetcher` — typed callable for fetching JWKS entries.
+  - `JwksKeyResolver` — JWKS by kid, cached; refetch on miss is COOLDOWN-THROTTLED (default 300s, minimum 60s) with a bounded negative cache storing SHA-256 digests of unknown kids, so a random-kid flood cannot amplify into one fetch per request or retain raw attacker-controlled key-id text; a `threading.Lock` serializes the miss path (thread-safe under the `asyncio.to_thread` worker-thread model — see `get_owner_context`); a fetch failure converts to `ServiceUnavailableError` (503), never a raw exception. Throttle is per-process (FOLLOWUPS.md #3). `OwnerTokenVerifier` — ES256, iss/aud/exp, tenant from `app_metadata` only.
   - `build_owner_verifier(settings)`, `bearer_token(request)`, `get_owner_context(request)` (FastAPI dependency).
 - **tenants/owner_gate.py** — owner-door body-size cap middleware (defense-in-depth, door A).
   - `install_owner_body_cap(app, path_prefix, max_body_bytes)` — delegates to `core/content_length.enforce_content_length_cap`. The guarded `path_prefix` is NOT hard-coded: `create_app` derives it from the tenants router's own mounted path (`/v1` + `tenants_router.prefix`), so a router rename moves the cap with it instead of silently unguarding the routes; it matches on the segment boundary (`core/paths.path_under_prefix`), so `/v1/ingestion` and siblings like `/v1/tenants2` are excluded. DECLARED-header-only, does not measure actual received bytes (FOLLOWUPS.md #2).
@@ -86,3 +87,8 @@ A living, terse index of `backend/src/app` (plus scripts, migrations, tests). On
 - **unit/** — routing decisions, owner JWT verify + JWKS cooldown throttle, owner body cap, visitor gate, origins, MCP tokens + security middleware, secret guard, contexts, core adapters, three-door spine, Vertex model/location config (ADR-0007).
 - **integration/** — tenant isolation sweep, `tenant_txn`, visitor gate over HTTP, owner body-cap wiring (real `create_app`), mounted MCP security, log hygiene, PDF extraction / DLQ / spike.
 - **fixtures/pdf/** — `scanned`/`diagram`/`poison`/`encrypted.pdf` + `generate_fixtures.py`.
+
+## docs/ and repo skills
+- **docs/FOLLOWUPS.md** — accepted limitations and deferred hardening for working code; distinct from the stub ledger.
+- **docs/build-reports/** — chronological factual build logs used as source material for build-in-public posts.
+- **.claude/skills/build-report/SKILL.md** — running build-report skill; appends traceable facts, numbers, stub deltas, and do-not-post flags.
